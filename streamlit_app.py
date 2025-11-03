@@ -32,10 +32,17 @@ ANALISES_COLS = ["id", "username", "tipo", "data_hora", "dados_json", "pdf_path"
 @st.cache_data
 def load_analises():
     if not os.path.exists(ANALISES_PATH) or os.path.getsize(ANALISES_PATH) == 0:
+        # Cria o arquivo com cabeçalho se não existir ou estiver vazio
         df = pd.DataFrame(columns=ANALISES_COLS)
         df.to_csv(ANALISES_PATH, index=False)
         return df
-    return pd.read_csv(ANALISES_PATH, dtype=str).fillna("")
+    try:
+        return pd.read_csv(ANALISES_PATH, dtype=str).fillna("")
+    except pd.errors.EmptyDataError:
+        # Se der erro de arquivo vazio, recria com cabeçalho
+        df = pd.DataFrame(columns=ANALISES_COLS)
+        df.to_csv(ANALISES_PATH, index=False)
+        return df
 
 def save_analises(df):
     for col in ANALISES_COLS:
