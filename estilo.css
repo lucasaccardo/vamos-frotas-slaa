@@ -1,7 +1,74 @@
-/* estilo.css - exemplo de fundo para a tela de login */
+/* === Fundo da tela de login === */
 .stApp {
-  background-image: url('background.png');
+  background-image: url('https://i.imgur.com/0Qw7Q1A.jpg'); /* link direto da imagem do seu álbum */
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+  min-height: 100vh;
+  font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+/* === Card de login === */
+.login-card {
+  background: rgba(20, 24, 32, 0.92);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+  padding: 32px 28px;
+  color: #E5E7EB;
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+/* === Logo centralizada na tela de login === */
+.login-wrapper > div:first-child img {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  width: 120px !important;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+}
+
+/* Se quiser forçar a logo em todas as telas (opcional) */
+.brand-badge, .sidebar .stImage img {
+  background-image: url('https://i.imgur.com/twdegw4.png');
+  background-size: contain;
+  background-repeat: no-repeat;
+}
+
+/* === Botões customizados === */
+button, .stButton>button {
+  background-color: #2563EB !important;
+  color: #fff !important;
+  border-radius: 8px !important;
+  font-weight: bold !important;
+  border: none !important;
+  padding: 10px 0 !important;
+  box-shadow: 0 2px 8px rgba(37,99,235,0.08);
+}
+button:hover, .stButton>button:hover {
+  background-color: #1d4ed8 !important;
+}
+
+/* === Cards e containers === */
+.main-container,
+[data-testid="stForm"],
+[data-testid="stExpander"] > div {
+  background-color: rgba(20,24,32,0.92) !important;
+  border-radius: 12px !important;
+  padding: 22px !important;
+  border: 1px solid rgba(255,255,255,0.06) !important;
+}
+
+/* === Títulos e fontes === */
+h1, h2, h3, h4, h5 {
+  color: #fff !important;
+}
+.stApp {
+  color: #E5E7EB !important;
+}
+
+/* === Esconde header/footer do Streamlit (opcional) === */
+header[data-testid="stHeader"], #MainMenu, footer {
+    display: none !important;
 }
