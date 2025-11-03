@@ -766,6 +766,9 @@ def renderizar_sidebar():
         st.button("🚪 Sair (Logout)", on_click=logout, type="secondary", use_container_width=True)
 # --- FIM DA ATUALIZAÇÃO ---
 
+print("DEBUG: Chegou no teste do __do_logout")
+if st.session_state.get('__do_logout'):
+
 # =========================
 # Initial state & routing
 # =========================
