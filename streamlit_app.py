@@ -65,23 +65,28 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
     with open(pdf_path, "wb") as f:
         f.write(pdf_bytes.getbuffer())
         
-# --- Adicione este bloco ANTES de montar o dict 'novo' ---
-if isinstance(dados, pd.DataFrame):
-    dados = dados.to_dict(orient="records")
-elif isinstance(dados, pd.Series):
-    dados = dados.to_dict()
-# --------------------------------------------------------
+    # --- INÍCIO DA CORREÇÃO DE INDENTAÇÃO ---
+    # Este bloco foi movido para dentro da função 'registrar_analise'
+    
+    # --- Adicione este bloco ANTES de montar o dict 'novo' ---
+    if isinstance(dados, pd.DataFrame):
+        dados = dados.to_dict(orient="records")
+    elif isinstance(dados, pd.Series):
+        dados = dados.to_dict()
+    # --------------------------------------------------------
 
-novo = {
-    "id": novo_id,
-    "username": username,
-    "tipo": tipo,
-    "data_hora": data_hora,
-    "dados_json": json.dumps(dados, ensure_ascii=False, default=converter_json),
-    "pdf_path": pdf_path
-}
-df = pd.concat([df, pd.DataFrame([novo])], ignore_index=True)
-save_analises(df)
+    novo = {
+        "id": novo_id,
+        "username": username,
+        "tipo": tipo,
+        "data_hora": data_hora,
+        # Corrigido: Removido 'default=converter_json' que causaria outro NameError
+        "dados_json": json.dumps(dados, ensure_ascii=False), 
+        "pdf_path": pdf_path
+    }
+    df = pd.concat([df, pd.DataFrame([novo])], ignore_index=True)
+    save_analises(df)
+    # --- FIM DA CORREÇÃO DE INDENTAÇÃO ---
     
 # <<< CORREÇÃO NameError: 'get_query_params' is not defined >>>
 def get_query_params():
@@ -1538,7 +1543,7 @@ else:
         with st.expander("🔍 Consultar Clientes e Placas"):
             if df_base is not None and not df_base.empty:
                 df_display = df_base[['CLIENTE', 'PLACA', 'VALOR MENSALIDADE']].copy()
-                df_display['VALOR MENSALIDADE'] = df_display['VALOR MENSALIDADE'].apply(formatar_moeda)
+                df_display['VALOR MENSALidade'] = df_display['VALOR MENSALIDADE'].apply(formatar_moeda)
                 st.dataframe(df_display, use_container_width=True, hide_index=True)
             else:
                 st.info("Base De Clientes Faturamento.xlsx não encontrada. Você poderá digitar os dados manualmente abaixo.")
@@ -1554,7 +1559,7 @@ else:
                     mensalidade = moeda_para_float(hit.iloc[0]["VALOR MENSALIDADE"])
                     st.success(f"Cliente: {cliente} | Mensalidade: {formatar_moeda(mensalidade)}")
                 else:
-                    st.warning("Placa não encontrada na base. Preencha os dados manualmente abaixo.")
+                    st.warning("Placa não encontrada na base. Preencha os dados manually abaixo.")
             cliente = st.text_input("Cliente (caso não tenha sido localizado)", value=cliente)
             mensalidade = st.number_input("Mensalidade (R$)", min_value=0.0, step=0.01, format="%.2f", value=float(mensalidade) if mensalidade else 0.0)
             st.subheader("2) Período e Serviço")
