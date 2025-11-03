@@ -798,8 +798,7 @@ if st.session_state.get('__do_logout'):
 # =========================
 if st.session_state.tela == "login":
     limpar_todos_backgrounds()
-    # Chama a função que prepara o CSS para o 'estilo.css' funcionar
-    set_login_background_url(BACKGROUND_URL_LOGIN) 
+    load_css("estilo.css") 
     
     st.markdown("""
     <style id="login-card-safe">
