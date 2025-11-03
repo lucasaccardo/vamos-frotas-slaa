@@ -797,7 +797,7 @@ def user_is_admin():
 def user_is_superadmin():
     return st.session_state.get("username") == SUPERADMIN_USERNAME or st.session_state.get("role") == "superadmin"
 
-# >>> INÍCIO DA CORREÇÃO <<<
+# >>> INÍCIO DA REORDENAÇÃO <<<
 def renderizar_sidebar():
     with st.sidebar:
         st.markdown("<div style='text-align:center;padding-top:8px'>", unsafe_allow_html=True)
@@ -820,18 +820,30 @@ def renderizar_sidebar():
         st.markdown("</div>", unsafe_allow_html=True)
 
         st.header("Menu de Navegação")
-        if user_is_admin():
-            st.button("👤 Gerenciar Usuários", on_click=ir_para_admin, use_container_width=True)
+        
+        # 1. Navegação Principal
         st.button("🏠 Voltar para Home", on_click=ir_para_home, use_container_width=True)
+        
+        # 2. Ação de Cálculo Condicional
         if st.session_state.tela in ("calc_comparativa", "calc_simples"):
             st.button("🔄 Limpar Cálculo", on_click=limpar_dados_comparativos, use_container_width=True)
-        st.button("🚪 Sair (Logout)", on_click=logout, type="secondary", use_container_width=True)
+        
+        # 3. Suporte (Todos)
         st.button("💬 Abrir Ticket", on_click=lambda: st.session_state.update({"tela": "tickets"}), use_container_width=True)
+
+        # 4. Administração (Agrupado)
+        if user_is_admin():
+            st.button("👤 Gerenciar Usuários", on_click=ir_para_admin, use_container_width=True)
+            
         if user_is_admin() or user_is_superadmin():
             st.button("📑 Relatório de Análises", on_click=ir_para_relatorio_analises, use_container_width=True)
+            
         if user_is_superadmin():
             st.button("📋 Gerenciar Tickets", on_click=lambda: st.session_state.update({"tela": "admin_tickets"}), use_container_width=True)
-# >>> FIM DA CORREÇÃO <<<
+
+        # 5. Sair (Sempre por último)
+        st.button("🚪 Sair (Logout)", on_click=logout, type="secondary", use_container_width=True)
+# >>> FIM DA REORDENAÇÃO <<<
 
 # =========================
 # Initial state & routing
