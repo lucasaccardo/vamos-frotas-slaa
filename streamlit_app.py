@@ -21,7 +21,43 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfgen import canvas
 from streamlit.components.v1 import html as components_html
 import json
-import uuid  # Importado para gerar IDs únicos
+import uuid  # Corrigido
+
+# --- CONSTANTES DE IMAGEM (URLs) ---
+# 👇 URLs que você forneceu 👇
+FAVICON_URL = "https://i.imgur.com/qiAtZJP.png" # Favicon da aba (do checklist)
+LOGO_URL_LOGIN = "https://i.imgur.com/twdegw4.png" # Seu novo logo
+LOGO_URL_SIDEBAR = "https://i.imgur.com/twdegw4.png" # Usando a mesma logo, mude se for diferente
+BACKGROUND_URL_LOGIN = "https://i.imgur.com/0Qw7Q1A.jpg" # Seu novo background
+# ------------------------------------
+
+# --- DEFINIÇÃO DE HELPERS MOVIDA PARA O TOPO ---
+def resource_path(filename: str) -> str:
+    """
+    Resolve a path relative to this file or current working dir.
+    Works on Streamlit Cloud and locally.
+    """
+    try:
+        base = os.path.dirname(__file__)
+    except Exception:
+        base = os.getcwd()
+    return os.path.join(base, filename)
+
+def load_css(file_path):
+    """
+    Carrega um arquivo CSS local de forma robusta.
+    """
+    full_path = resource_path(file_path)
+    try:
+        if os.path.exists(full_path):
+            with open(full_path) as f:
+                st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+        else:
+            # Não emite aviso se o arquivo simplesmente não existir
+            pass 
+    except Exception as e:
+        st.warning(f"Não foi possível carregar o 'estilo.css': {e}")
+
 
 # --- INICIALIZAÇÃO DO SUPABASE ---
 from supabase import create_client, Client
@@ -36,10 +72,7 @@ if not url or not key:
 supabase: Client = create_client(url, key)
 # ---------------------------------
 
-# --- Caminhos de Arquivos e Pastas ---
-# PDFS_DIR não é mais necessário, pois usaremos o Supabase Storage.
-
-# Definição das colunas (ainda útil para validação)
+# --- Definição das colunas ---
 ANALISES_COLS = ["id", "username", "tipo", "data_hora", "dados_json", "pdf_path"]
 REQUIRED_USER_COLUMNS = [
     "username", "password", "role", "full_name", "matricula",
@@ -49,6 +82,29 @@ REQUIRED_USER_COLUMNS = [
 TICKET_COLUMNS = ["id", "username", "full_name", "email", "assunto", "descricao", "status", "resposta", "data_criacao", "data_resposta"]
 SUPERADMIN_USERNAME = st.secrets.get("SUPERADMIN_USERNAME", "lucas.sureira")
 
+
+# =========================
+# Page config (ATUALIZADO)
+# =========================
+try:
+    st.set_page_config(
+        page_title="Frotas Vamos SLA",
+        page_icon=FAVICON_URL,  # <-- ATUALIZADO
+        layout="centered",
+        initial_sidebar_state="expanded"
+    )
+except Exception as e:
+    # Fallback para caso a URL da imagem falhe
+    st.set_page_config(
+        page_title="Frotas Vamos SLA",
+        page_icon="🚛",
+        layout="centered",
+        initial_sidebar_state="expanded"
+    )
+
+# Carregue o CSS (agora 'resource_path' está definida)
+# Fazemos isso *depois* do set_page_config
+load_css("estilo.css")
 
 # =========================
 # Funções de Dados (Refatoradas para Supabase)
@@ -65,12 +121,7 @@ def load_analises():
         return pd.DataFrame(columns=ANALISES_COLS)
 
 def save_analises(df):
-    """
-    Salva o DataFrame inteiro no Supabase.
-    'upsert' atualiza linhas existentes ou insere novas.
-    """
     try:
-        # Garante que todas as colunas necessárias existem
         for col in ANALISES_COLS:
             if col not in df.columns:
                 df[col] = ""
@@ -81,16 +132,13 @@ def save_analises(df):
     except Exception as e:
         st.error(f"Erro ao salvar análises no Supabase: {e}")
 
-# --- 🚀 FUNÇÃO MODIFICADA PARA USAR SUPABASE STORAGE 🚀 ---
 def registrar_analise(username, tipo, dados, pdf_bytes):
     novo_id = str(uuid.uuid4())
     data_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # 1. Define o nome do arquivo no Storage
     pdf_filename = f"{tipo}_{username}_{novo_id}_{data_hora.replace(' ','_').replace(':','-')}.pdf"
     
     try:
-        # 2. Faz o upload dos bytes do PDF para o bucket 'pdfs'
         supabase.storage.from_("pdfs").upload(
             path=pdf_filename,
             file=pdf_bytes.getbuffer(),
@@ -98,24 +146,20 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
         )
     except Exception as e:
         st.error(f"Falha ao fazer upload do PDF para o Supabase Storage: {e}")
-        # Mesmo se o PDF falhar, o registro da análise será salvo.
-        # O pdf_path ficará apenas com o nome, mas o upload falhou.
         pass
         
-    # 3. Converte dados se forem DataFrame/Series
     if isinstance(dados, pd.DataFrame):
         dados = dados.to_dict(orient="records")
     elif isinstance(dados, pd.Series):
         dados = dados.to_dict()
 
-    # 4. Salva o registro no banco de dados, apontando para o arquivo no Storage
     novo_registro = {
         "id": novo_id,
         "username": username,
         "tipo": tipo,
         "data_hora": data_hora,
         "dados_json": json.dumps(dados, ensure_ascii=False),
-        "pdf_path": pdf_filename  # Salva apenas o NOME do arquivo
+        "pdf_path": pdf_filename
     }
     
     try:
@@ -123,7 +167,6 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
         st.cache_data.clear()
     except Exception as e:
         st.error(f"Erro ao registrar análise no Supabase: {e}")
-# --- FIM DA MODIFICAÇÃO ---
 
 # --- Tickets ---
 @st.cache_data(ttl=60)
@@ -211,77 +254,40 @@ def save_user_db(df_users: pd.DataFrame):
         st.error(f"Erro ao salvar usuários no Supabase: {e}")
 
 # =========================
-# Helpers (Otimizados)
+# Background helpers (Login) - ATUALIZADO
 # =========================
-
-def get_query_params():
+def set_login_background_url(url: str):
+    """Aplica um background na tela de login a partir de uma URL."""
     try:
-        return dict(st.query_params)
-    except Exception:
-        try:
-            params = st.experimental_get_query_params()
-            return {k: (v[0] if isinstance(v, list) else v) for k, v in params.items()}
-        except Exception:
-            return {}
-
-def resource_path(filename: str) -> str:
-    try:
-        base = os.path.dirname(__file__)
-    except Exception:
-        base = os.getcwd()
-    return os.path.join(base, filename)
-
-try:
-    st.set_page_config(
-        page_title="Frotas Vamos SLA",
-        page_icon=resource_path("logo.png") if os.path.exists(resource_path("logo.png")) else "🚛",
-        layout="centered",
-        initial_sidebar_state="expanded"
-    )
-except Exception:
-    pass
-
-# =========================
-# Background helpers (Login)
-# =========================
-def set_login_background(png_path: str):
-    try:
-        path = png_path if os.path.isabs(png_path) else resource_path(png_path)
-        if not os.path.exists(path):
-            return False
-        with open(path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
-
+        # Nota: Seu 'estilo.css' já faz isso, esta função é um 'fallback'
+        # se o CSS não carregar, e também define o .stApp como transparente
+        # para que o .login-wrapper::before (do CSS antigo) funcione.
+        # Vamos simplificar para *apenas* injetar o CSS que o seu estilo.css espera.
         css = f"""
         <style id="login-bg-fixed">
-        html, body, .stApp {{ background: transparent !important; margin:0; padding:0; height:100%; }}
-        .login-wrapper::before {{
-            content: "";
-            position: fixed;
-            inset: 0;
-            z-index: -2;
-            background-image: url("data:image/png;base64,{b64}");
+        html, body, .stApp {{ 
+            background-image: url("{url}") !important;
             background-size: cover;
-            background-position: center center;
+            background-position: center;
             background-repeat: no-repeat;
-            pointer-events: none;
-            transform: translateZ(0);
-            opacity: 1;
+            min-height: 100vh;
         }}
-        [data-testid="stSidebar"] {{ position: relative; z-index: 9999; }}
         </style>
         """
         st.markdown(css, unsafe_allow_html=True)
         st.session_state["login_bg_applied"] = True
-        return True
-    except Exception:
-        return False
+    except Exception as e:
+        st.warning(f"Não foi possível carregar a imagem de fundo: {e}")
+
 
 def clear_login_background():
+    # Esta função agora limpa o fundo injetado
     try:
         css = """
-        <style id="login-bg-clear">
-        .login-wrapper::before { display: none !important; opacity: 0 !important; }
+        <style id="login-bg-fixed">
+        html, body, .stApp { 
+            background-image: none !important;
+        }
         </style>
         """
         st.markdown(css, unsafe_allow_html=True)
@@ -297,26 +303,20 @@ def limpar_todos_backgrounds():
     st.markdown('<style id="app-auth-style"></style>', unsafe_allow_html=True)
     st.markdown('<style id="login-bg-clear"></style>', unsafe_allow_html=True)
 
-def show_logo_file(path: str, width: int = 140):
-    try:
-        p = path if os.path.isabs(path) else resource_path(path)
-        if os.path.exists(p):
-            img = Image.open(p)
-            st.image(img, width=width)
-            st.markdown("""
-            <style>
-            button[title="Expandir imagem"], button[title="Expand image"], button[aria-label="Expandir imagem"], button[aria-label="Expand image"] {
-                display: none !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            return True
-    except Exception:
-        pass
-    return False
+def show_logo_url(url: str, width: int = 140):
+    """Mostra uma imagem de uma URL e esconde o botão de expandir."""
+    st.image(url, width=width)
+    # Esconde o botão 'expandir' que o Streamlit coloca nas imagens
+    st.markdown("""
+        <style>
+        button[title="Expandir imagem"], button[title="Expand image"], button[aria-label="Expandir imagem"], button[aria-label="Expand image"] {
+            display: none !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
 
 # =========================
-# Utilities & Password (Mantido como estava)
+# Utilities & Password
 # =========================
 def safe_rerun():
     try:
@@ -364,61 +364,34 @@ def verify_password(stored_hash: str, provided_password: str) -> Tuple[bool, boo
     return ok, bool(ok)
 
 # =========================
-# Tema Autenticado
+# Tema Autenticado (ATUALIZADO)
 # =========================
 def aplicar_estilos_authenticated():
-    badge_css = ""
-    try:
-        lp = resource_path("logo.png")
-        if os.path.exists(lp):
-            with open(lp, "rb") as f:
-                logo_b = base64.b64encode(f.read()).decode()
-            badge_css = f"""
-            .brand-badge {{
-                position: fixed;
-                top: 12px;
-                left: 16px;
-                width: 140px;
-                height: 44px;
-                background-image: url("data:image/png;base64,{logo_b}");
-                background-size: contain;
-                background-position: left center;
-                background-repeat: no-repeat;
-                z-index: 1000;
-                pointer-events: none;
-            }}
-            """
-    except Exception:
-        badge_css = ""
-    css = f"""
+    # Remove o 'badge' pois a sidebar já mostra o logo
+    css = """
     <style id="app-auth-style">
-    :root {{ --bg: #0f1724; --card: #0f172a; --border: rgba(255,255,255,0.06); }}
-    html, body, .stApp {{
+    /* Seu estilo.css já define .main-container, etc. */
+    /* Esta função SÓ vai sobrescrever o fundo para as telas logadas. */
+    .stApp {
         background-image: none !important;
         background: radial-gradient(circle at 10% 10%, rgba(15,23,42,0.96) 0%, rgba(11,17,24,1) 50%) !important;
         color: #E5E7EB !important;
-    }}
-    section.main > div.block-container {{ max-width: 1100px !important; margin: 0 auto !important; padding-top: 24px !important; padding-bottom: 28px !important; }}
-    .main-container, [data-testid="stForm"], [data-testid="stExpander"] > div {{
-        background-color: rgba(12,17,23,0.85) !important;
-        border-radius: 10px !important;
-        padding: 20px !important;
-        border: 1px solid var(--border) !important;
-    }}
-    header[data-testid="stHeader"], #MainMenu, footer {{ display: none !important; }}
-    {badge_css}
+    }
+    
+    /* Garante que o CSS de esconder o menu seja aplicado */
+    header[data-testid="stHeader"], #MainMenu, footer {
+        display: none !important;
+    }
     </style>
     """
     try:
         st.markdown(css, unsafe_allow_html=True)
-        if badge_css:
-            st.markdown("<div class='brand-badge' aria-hidden='true'></div>", unsafe_allow_html=True)
     except Exception:
         pass
-    clear_login_background()
+    # Não precisa mais do clear_login_background, pois esta função já define o novo fundo.
 
 # =========================
-# Política de Senha (Mantido)
+# Política de Senha
 # =========================
 PASSWORD_MIN_LEN = 10
 SPECIAL_CHARS = r"!@#$%^&*()_+\-=\[\]{};':\",.<>/?\\|`~"
@@ -444,7 +417,7 @@ def validate_password_policy(password: str, username: str = "", email: str = "")
     return (len(errors) == 0), errors
 
 # =========================
-# Helpers de E-mail (Mantido)
+# Helpers de E-mail
 # =========================
 def smtp_available():
     host = st.secrets.get("EMAIL_HOST", "")
@@ -605,7 +578,7 @@ Bom trabalho!
     return send_email(dest_email, subject, plain, html)
 
 # =========================
-# Lógica de Senha (Mantida)
+# Lógica de Senha
 # =========================
 def is_password_expired(row) -> bool:
     try:
@@ -767,23 +740,13 @@ def user_is_admin():
 def user_is_superadmin():
     return st.session_state.get("username") == SUPERADMIN_USERNAME or st.session_state.get("role") == "superadmin"
 
+# --- renderizar_sidebar (ATUALIZADO) ---
 def renderizar_sidebar():
     with st.sidebar:
         st.markdown("<div style='text-align:center;padding-top:8px'>", unsafe_allow_html=True)
         try:
-            sidebar_logo_path = resource_path("logo_sidebar.png")
-            if os.path.exists(sidebar_logo_path):
-                st.image(sidebar_logo_path, width=100)
-            elif os.path.exists(resource_path("logo.png")):
-                st.image(resource_path("logo.png"), width=100)
-            st.markdown("""
-            <style>
-            .css-17l3k35 { display: none !important; }
-            button[title="Expandir imagem"], button[title="Expand image"], button[aria-label="Expandir imagem"], button[aria-label="Expand image"] {
-                display: none !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
+            # Mostra o logo da sidebar a partir da URL
+            show_logo_url(LOGO_URL_SIDEBAR, width=100)
         except Exception as e:
             pass
         st.markdown("</div>", unsafe_allow_html=True)
@@ -807,6 +770,7 @@ def renderizar_sidebar():
             st.button("📋 Gerenciar Tickets", on_click=lambda: st.session_state.update({"tela": "admin_tickets"}), use_container_width=True)
 
         st.button("🚪 Sair (Logout)", on_click=logout, type="secondary", use_container_width=True)
+# --- FIM DA ATUALIZAÇÃO ---
 
 # =========================
 # Initial state & routing
@@ -832,26 +796,29 @@ if st.session_state.get('__do_logout'):
 # =========================
 if st.session_state.tela == "login":
     limpar_todos_backgrounds()
-    set_login_background(resource_path("background.png"))
+    # --- ATUALIZADO para usar URL ---
+    # Seu 'estilo.css' já define o fundo, mas chamamos de novo
+    # para garantir que ele tenha prioridade caso 'aplicar_estilos_authenticated'
+    # tenha sido chamado antes.
+    set_login_background_url(BACKGROUND_URL_LOGIN) 
     
     st.markdown("""
     <style id="login-card-safe">
     section.main > div.block-container { max-width: 920px !important; margin: 0 auto !important; padding-top: 0 !important; padding-bottom: 0 !important; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
     .login-wrapper { width:100%; max-width:920px; margin:0 auto; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:24px 0; }
-    .login-card { width:400px; max-width:calc(100% - 48px); padding: 24px 22px; border-radius:12px; background: rgba(6,8,12,0.88); box-shadow:0 18px 40px rgba(0,0,0,0.55); border:1px solid rgba(255,255,255,0.04); color:#E5E7EB; position:relative; z-index:2; }
+    /* Estilos do login-card e botões agora vêm do 'estilo.css' */
     .brand-title { text-align:center; font-weight:700; font-size:22px; color:#E5E7EB; margin-bottom:6px; }
     .brand-subtitle { text-align:center; color: rgba(255,255,255,0.78); font-size:13px; margin-bottom:14px; }
-    html, body, .stApp { background: transparent !important; margin: 0; padding: 0; height: 100%; }
-    [data-testid="stSidebar"] { position: relative; z-index: 9999; }
-    header[data-testid="stHeader"] {display: none !important;}
-    footer {display: none !important;}
-    #MainMenu {display: none !important;}
     </style>
     """, unsafe_allow_html=True)
     
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
+    # Adicionando o 'login-card' que seu CSS espera
+    st.markdown('<div class="login-card">', unsafe_allow_html=True) 
+    
     st.markdown("<div style='text-align: center; margin-bottom: 12px;'>", unsafe_allow_html=True)
-    show_logo_file(resource_path("logo.png"), width=140)
+    # --- ATUALIZADO para usar URL ---
+    show_logo_url(LOGO_URL_LOGIN, width=140)
     st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div class='brand-title'>Frotas Vamos SLA</div>", unsafe_allow_html=True)
@@ -870,8 +837,8 @@ if st.session_state.tela == "login":
         if st.button("Reset Password"):
             ir_para_forgot(); safe_rerun()
 
-    st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True) # Fecha login-card
+    st.markdown("</div>", unsafe_allow_html=True) # Fecha login-wrapper
 
     if submit_login:
         df_users = load_user_db()
@@ -997,9 +964,13 @@ elif st.session_state.tela == "register":
                         "last_password_change": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
                         "force_password_reset": ""
                     })
-                    df = pd.concat([df, pd.DataFrame([new_user])], ignore_index=True)
-                    save_user_db(df)
-                    st.success("✅ Cadastro enviado! Aguarde aprovação.")
+                    try:
+                        supabase.table('users').insert(new_user).execute()
+                        st.cache_data.clear()
+                        st.success("✅ Cadastro enviado! Aguarde aprovação.")
+                    except Exception as e:
+                        st.error(f"Erro ao salvar novo usuário: {e}")
+                    
     st.markdown("</div>", unsafe_allow_html=True)
 
 
@@ -1031,7 +1002,7 @@ elif st.session_state.tela == "forgot_password":
                 expires = (datetime.utcnow() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
                 df.loc[idx, "reset_token"] = token
                 df.loc[idx, "reset_expires_at"] = expires
-                save_user_db(df)
+                save_user_db(df) # Salva o token no Supabase
                 base_url = get_app_base_url() or "https://SEU_DOMINIO"
                 reset_link = f"{base_url}?reset_token={token}"
                 if send_reset_email(email.strip(), reset_link):
@@ -1091,7 +1062,7 @@ elif st.session_state.tela == "reset_password":
                     df.loc[idx, "reset_token"] = ""
                     df.loc[idx, "reset_expires_at"] = ""
                     df.loc[idx, "last_password_change"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-                    df.loc[idx, "force_password_reset"] = "" # Pode ser string vazia
+                    df.loc[idx, "force_password_reset"] = ""
                     save_user_db(df)
                     st.success("Senha redefinida com sucesso! Faça login novamente.")
                     if st.button("Ir para login", type="primary"):
@@ -1133,7 +1104,7 @@ elif st.session_state.tela == "force_change_password":
                 st.error("A nova senha não pode ser igual à senha atual."); st.stop()
             df.loc[idx, "password"] = hash_password(new_pass)
             df.loc[idx, "last_password_change"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            df.loc[idx, "force_password_reset"] = "" # Pode ser string vazia
+            df.loc[idx, "force_password_reset"] = ""
             save_user_db(df)
             st.success("Senha atualizada com sucesso.")
             if not str(df.loc[idx, "accepted_terms_on"]).strip():
@@ -1243,7 +1214,7 @@ else:
         st.stop()
         
     limpar_todos_backgrounds()
-    aplicar_estilos_authenticated()
+    aplicar_estilos_authenticated() # Aplica o fundo de gradiente
     renderizar_sidebar()
     st.markdown("<div class='main-container'>", unsafe_allow_html=True)
 
@@ -1659,7 +1630,7 @@ else:
                     st.markdown("---")
                     st.write("Peças adicionadas:")
                     opcoes_pecas = [f"{p['nome']} - {formatar_moeda(p['valor'])}" for p in st.session_state.pecas_atuais]
-                    pecas_para_remover = st.multiselect("Selecione para remover:", options=opcoes_pecas)
+                    pecas_para_remover = st.multiselect("Selecione para remover:", options=opcoes_pecas) # Corrigido de opcoes_locas
                     if st.button("🗑️ Remover Selecionadas", type="secondary", use_container_width=True):
                         if pecas_para_remover:
                             nomes_para_remover = [item.split(' - ')[0] for item in pecas_para_remover]
@@ -1736,63 +1707,58 @@ else:
         
         if df.empty:
             st.info("Nenhuma análise encontrada.")
-            st.stop()
-            
-        usuarios = ["Todos"] + sorted(df["username"].unique())
-        usuario_sel = st.selectbox("Filtrar por usuário:", usuarios)
-        if usuario_sel != "Todos":
-            df = df[df["username"] == usuario_sel]
-            
-        tipo_sel = st.selectbox("Tipo de análise:", ["Todos", "cenarios", "sla_mensal"])
-        if tipo_sel != "Todos":
-            df = df[df["tipo"] == tipo_sel]
-            
-        st.write(f"Total de análises: {len(df)}")
-        
-        if not df.empty:
-            for _, row in df.sort_values("data_hora", ascending=False).iterrows():
-                try:
-                    # O dado 'dados_json' vem como string do banco
-                    dados = json.loads(row["dados_json"])
-                except Exception:
-                    dados = row["dados_json"] # Fallback se já for um dict
-                    
-                st.markdown(f"""
-                <div style="border:1px solid #444;padding:10px;border-radius:8px;margin-bottom:8px;">
-                <b>ID:</b> {row['id']}<br>
-                <b>Usuário:</b> {row['username']}<br>
-                <b>Tipo:</b> {row['tipo']}<br>
-                <b>Data/Hora:</b> {row['data_hora']}<br>
-                <b>Dados:</b> <pre style="font-size:12px">{json.dumps(dados, indent=2, ensure_ascii=False)}</pre>
-                """, unsafe_allow_html=True)
-                
-                # --- 🚀 LÓGICA DE DOWNLOAD MODIFICADA 🚀 ---
-                pdf_filename = row["pdf_path"]
-                if pdf_filename:
-                    try:
-                        # 1. Baixa os bytes do PDF do Supabase Storage
-                        pdf_bytes_data = supabase.storage.from_("pdfs").download(pdf_filename)
-                        
-                        # 2. Oferece o botão de download com esses bytes
-                        st.download_button(
-                            label="📥 Baixar PDF",
-                            data=pdf_bytes_data,
-                            file_name=pdf_filename,
-                            mime="application/pdf"
-                        )
-                    except Exception as e:
-                        st.warning(f"PDF registrado, mas não encontrado no Storage: {pdf_filename}")
-                        st.caption(f"Erro: {e}")
-                else:
-                    st.caption("Nenhum PDF associado a esta análise.")
-                # --- FIM DA MODIFICAÇÃO ---
-                    
-                st.markdown("</div>", unsafe_allow_html=True)
-                
-            csv_bytes = df.to_csv(index=False).encode("utf-8")
-            st.download_button("⬇️ Baixar relatório CSV", data=csv_bytes, file_name="relatorio_analises.csv", mime="text/csv")
         else:
-            st.info("Nenhuma análise encontrada para o filtro selecionado.")
+            usuarios = ["Todos"] + sorted(df["username"].unique())
+            usuario_sel = st.selectbox("Filtrar por usuário:", usuarios)
+            if usuario_sel != "Todos":
+                df = df[df["username"] == usuario_sel]
+                
+            tipo_sel = st.selectbox("Tipo de análise:", ["Todos", "cenarios", "sla_mensal"])
+            if tipo_sel != "Todos":
+                df = df[df["tipo"] == tipo_sel]
+                
+            st.write(f"Total de análises: {len(df)}")
+            
+            if not df.empty:
+                for _, row in df.sort_values("data_hora", ascending=False).iterrows():
+                    try:
+                        dados = json.loads(row["dados_json"])
+                    except Exception:
+                        dados = row["dados_json"]
+                        
+                    st.markdown(f"""
+                    <div style="border:1px solid #444;padding:10px;border-radius:8px;margin-bottom:8px;">
+                    <b>ID:</b> {row['id']}<br>
+                    <b>Usuário:</b> {row['username']}<br>
+                    <b>Tipo:</b> {row['tipo']}<br>
+                    <b>Data/Hora:</b> {row['data_hora']}<br>
+                    <b>Dados:</b> <pre style="font-size:12px">{json.dumps(dados, indent=2, ensure_ascii=False)}</pre>
+                    """, unsafe_allow_html=True)
+                    
+                    pdf_filename = row["pdf_path"]
+                    if pdf_filename:
+                        try:
+                            pdf_bytes_data = supabase.storage.from_("pdfs").download(pdf_filename)
+                            
+                            st.download_button(
+                                label="📥 Baixar PDF",
+                                data=pdf_bytes_data,
+                                file_name=pdf_filename,
+                                mime="application/pdf",
+                                key=f"download_{row['id']}" # Chave única para o botão
+                            )
+                        except Exception as e:
+                            st.warning(f"PDF registrado ({pdf_filename}), mas não encontrado no Storage.")
+                            # st.caption(f"Erro: {e}") # Opcional: debug
+                    else:
+                        st.caption("Nenhum PDF associado a esta análise.")
+                        
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    
+                csv_bytes = df.to_csv(index=False).encode("utf-8")
+                st.download_button("⬇️ Baixar relatório CSV", data=csv_bytes, file_name="relatorio_analises.csv", mime="text/csv")
+            else:
+                st.info("Nenhuma análise encontrada para o filtro selecionado.")
             
         if st.button("Voltar para Home"):
             ir_para_home(); safe_rerun()
@@ -1827,11 +1793,9 @@ else:
                     responder = col1.form_submit_button("Responder e Fechar", type="primary")
                     ignorar = col2.form_submit_button("Ignorar (Fechar sem resposta)")
                 if responder or ignorar:
-                    # Atualiza o DataFrame local
                     df.loc[df["id"] == row["id"], "resposta"] = resposta if responder else "Ticket fechado sem resposta."
                     df.loc[df["id"] == row["id"], "status"] = "fechado"
                     df.loc[df["id"] == row["id"], "data_resposta"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-                    # Salva o DataFrame inteiro de volta no Supabase
                     save_tickets(df)
                     st.success("Ticket fechado!")
                     safe_rerun()
