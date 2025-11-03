@@ -28,10 +28,9 @@ import uuid  # Corrigido
 FAVICON_URL = "https://i.imgur.com/qiAtZJP.png" 
 LOGO_URL_LOGIN = "https://i.imgur.com/qiAtZJP.png"
 LOGO_URL_SIDEBAR = "https://i.imgur.com/qiAtZJP.png"
-BACKGROUND_URL_LOGIN = "https://i.imgur.com/QbZzxrX.png" # Do seu estilo.css
 # ------------------------------------
 
-# --- 💡 CORREÇÃO: Funções movidas para o topo ---
+# --- DEFINIÇÃO DE HELPERS MOVIDA PARA O TOPO ---
 def resource_path(filename: str) -> str:
     """
     Resolve a path relative to this file or current working dir.
@@ -73,7 +72,7 @@ if not url or not key:
 supabase: Client = create_client(url, key)
 # ---------------------------------
 
-# --- 💡 CORREÇÃO 1: Conversor de JSON 💡 ---
+# --- Conversor de JSON para Numpy/Pandas ---
 def converter_json(obj):
     """Converte tipos não-serializáveis (como numpy) para o JSON."""
     if isinstance(obj, (np.integer, np.int64)):
@@ -85,7 +84,7 @@ def converter_json(obj):
     if isinstance(obj, (datetime, pd.Timestamp)):
         return obj.isoformat()
     raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
-# --- FIM DA CORREÇÃO 1 ---
+# --- FIM ---
 
 
 # --- Definição das colunas ---
@@ -146,7 +145,6 @@ def save_analises(df):
     except Exception as e:
         st.error(f"Erro ao salvar análises no Supabase: {e}")
 
-# --- 💡 CORREÇÃO 2: registrar_analise 💡 ---
 def registrar_analise(username, tipo, dados, pdf_bytes):
     novo_id = str(uuid.uuid4())
     data_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -154,10 +152,9 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
     pdf_filename = f"{tipo}_{username}_{novo_id}_{data_hora.replace(' ','_').replace(':','-')}.pdf"
     
     try:
-        # CORRIGIDO: Trocado .getbuffer() por .getvalue()
         supabase.storage.from_("pdfs").upload(
             path=pdf_filename,
-            file=pdf_bytes.getvalue(), # <--- CORREÇÃO AQUI
+            file=pdf_bytes.getvalue(), # Corrigido: .getbuffer() -> .getvalue()
             file_options={"content-type": "application/pdf"}
         )
     except Exception as e:
@@ -174,8 +171,7 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
         "username": username,
         "tipo": tipo,
         "data_hora": data_hora,
-        # CORRIGIDO: Adicionado o 'default=converter_json'
-        "dados_json": json.dumps(dados, ensure_ascii=False, default=converter_json), # <--- CORREÇÃO AQUI
+        "dados_json": json.dumps(dados, ensure_ascii=False, default=converter_json), # Corrigido: usa o conversor
         "pdf_path": pdf_filename
     }
     
@@ -184,7 +180,6 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
         st.cache_data.clear()
     except Exception as e:
         st.error(f"Erro ao registrar análise no Supabase: {e}")
-# --- FIM DA CORREÇÃO 2 ---
 
 # --- Tickets ---
 @st.cache_data(ttl=60)
@@ -277,15 +272,15 @@ def save_user_db(df_users: pd.DataFrame):
 def setup_login_background():
     """
     Esta função agora só garante que o .stApp seja transparente,
-    permitindo que o 'estilo.css' controle o fundo.
+    permitindo que o 'estilo.css' (que define o fundo) funcione.
     """
     try:
-        css = f"""
+        css = """
         <style id="login-bg-setup">
         /* Garante que o app é transparente para o CSS funcionar */
-        html, body, .stApp {{ 
+        html, body, .stApp { 
             background: transparent !important; 
-        }}
+        }
         </style>
         """
         st.markdown(css, unsafe_allow_html=True)
@@ -300,7 +295,6 @@ def limpar_todos_backgrounds():
 def show_logo_url(url: str, width: int = 140):
     """Mostra uma imagem de uma URL e esconde o botão de expandir."""
     st.image(url, width=width)
-    # Esconde o botão 'expandir' que o Streamlit coloca nas imagens
     st.markdown("""
         <style>
         button[title="Expandir imagem"], button[title="Expand image"], button[aria-label="Expandir imagem"], button[aria-label="Expand image"] {
@@ -381,7 +375,8 @@ def aplicar_estilos_authenticated():
         color: #E5E7EB !important;
     }
     
-    /* Garante que o CSS de esconder o menu seja aplicado */
+    /* Garante que o CSS de esconder o menu seja aplicado 
+       (seu estilo.css já faz isso, mas é bom garantir) */
     header[data-testid="stHeader"], #MainMenu, footer {
         display: none !important;
     }
@@ -802,12 +797,12 @@ if st.session_state.tela == "login":
     # O 'estilo.css' define a imagem de fundo.
     setup_login_background() 
     
-    # Removemos o CSS inline, pois ele agora está no 'estilo.css'
-    # Deixamos apenas o 'wrapper' para centralizar
     st.markdown("""
     <style id="login-card-safe">
+    /* A maioria dos estilos (fundo, etc.) vem do 'estilo.css' */
     section.main > div.block-container { max-width: 920px !important; margin: 0 auto !important; padding-top: 0 !important; padding-bottom: 0 !important; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
     .login-wrapper { width:100%; max-width:920px; margin:0 auto; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:24px 0; }
+    /* .login-card { ... } (Vem do estilo.css) */
     .brand-title { text-align:center; font-weight:700; font-size:22px; color:#E5E7EB; margin-bottom:6px; }
     .brand-subtitle { text-align:center; color: rgba(255,255,255,0.78); font-size:13px; margin-bottom:14px; }
     </style>
