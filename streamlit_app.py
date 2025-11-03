@@ -25,10 +25,10 @@ import uuid  # Corrigido
 
 # --- CONSTANTES DE IMAGEM (URLs) ---
 # 👇 URLs que você forneceu 👇
-FAVICON_URL = "https://i.imgur.com/qiAtZJP.png" # Favicon da aba (do checklist)
-LOGO_URL_LOGIN = "https://i.imgur.com/twdegw4.png" # Seu novo logo
+FAVICON_URL = "https://i.imgur.com/qiAtZJP.png" 
+LOGO_URL_LOGIN = "https://i.imgur.com/twdegw4.png"
 LOGO_URL_SIDEBAR = "https://i.imgur.com/twdegw4.png" # Usando a mesma logo, mude se for diferente
-BACKGROUND_URL_LOGIN = "https://i.imgur.com/0Qw7Q1A.jpg" # Seu novo background
+BACKGROUND_URL_LOGIN = "https://i.imgur.com/0Qw7Q1A.jpg" # URL do seu estilo.css (para fallback)
 # ------------------------------------
 
 # --- DEFINIÇÃO DE HELPERS MOVIDA PARA O TOPO ---
@@ -257,51 +257,33 @@ def save_user_db(df_users: pd.DataFrame):
 # Background helpers (Login) - ATUALIZADO
 # =========================
 def set_login_background_url(url: str):
-    """Aplica um background na tela de login a partir de uma URL."""
+    """
+    Esta função agora só garante que o .stApp seja transparente,
+    permitindo que o 'estilo.css' controle o fundo.
+    """
     try:
-        # Nota: Seu 'estilo.css' já faz isso, esta função é um 'fallback'
-        # se o CSS não carregar, e também define o .stApp como transparente
-        # para que o .login-wrapper::before (do CSS antigo) funcione.
-        # Vamos simplificar para *apenas* injetar o CSS que o seu estilo.css espera.
         css = f"""
-        <style id="login-bg-fixed">
+        <style id="login-bg-setup">
+        /* Garante que o app é transparente para o CSS funcionar */
         html, body, .stApp {{ 
-            background-image: url("{url}") !important;
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            min-height: 100vh;
+            background: transparent !important; 
         }}
         </style>
         """
         st.markdown(css, unsafe_allow_html=True)
         st.session_state["login_bg_applied"] = True
     except Exception as e:
-        st.warning(f"Não foi possível carregar a imagem de fundo: {e}")
+        st.warning(f"Não foi possível aplicar estilos de fundo: {e}")
 
 
 def clear_login_background():
-    # Esta função agora limpa o fundo injetado
-    try:
-        css = """
-        <style id="login-bg-fixed">
-        html, body, .stApp { 
-            background-image: none !important;
-        }
-        </style>
-        """
-        st.markdown(css, unsafe_allow_html=True)
-    except Exception:
-        pass
-    try:
-        st.session_state["login_bg_applied"] = False
-    except Exception:
-        pass
+    # Esta função agora não precisa fazer nada, 
+    # pois 'aplicar_estilos_authenticated' vai sobrescrever o fundo.
+    pass
 
 def limpar_todos_backgrounds():
-    st.markdown('<style id="login-bg-fixed"></style>', unsafe_allow_html=True)
+    st.markdown('<style id="login-bg-setup"></style>', unsafe_allow_html=True)
     st.markdown('<style id="app-auth-style"></style>', unsafe_allow_html=True)
-    st.markdown('<style id="login-bg-clear"></style>', unsafe_allow_html=True)
 
 def show_logo_url(url: str, width: int = 140):
     """Mostra uma imagem de uma URL e esconde o botão de expandir."""
@@ -318,6 +300,16 @@ def show_logo_url(url: str, width: int = 140):
 # =========================
 # Utilities & Password
 # =========================
+def get_query_params():
+    try:
+        return dict(st.query_params)
+    except Exception:
+        try:
+            params = st.experimental_get_query_params()
+            return {k: (v[0] if isinstance(v, list) else v) for k, v in params.items()}
+        except Exception:
+            return {}
+
 def safe_rerun():
     try:
         st.experimental_rerun()
@@ -367,11 +359,14 @@ def verify_password(stored_hash: str, provided_password: str) -> Tuple[bool, boo
 # Tema Autenticado (ATUALIZADO)
 # =========================
 def aplicar_estilos_authenticated():
-    # Remove o 'badge' pois a sidebar já mostra o logo
+    # Badge (logo no canto) é desnecessário se o sidebar e o CSS já o têm.
+    # Vamos focar em garantir o fundo gradiente para telas logadas.
     css = """
     <style id="app-auth-style">
     /* Seu estilo.css já define .main-container, etc. */
-    /* Esta função SÓ vai sobrescrever o fundo para as telas logadas. */
+    
+    /* Esta função SÓ vai sobrescrever o fundo para as telas logadas,
+       anulando o fundo de login do estilo.css */
     .stApp {
         background-image: none !important;
         background: radial-gradient(circle at 10% 10%, rgba(15,23,42,0.96) 0%, rgba(11,17,24,1) 50%) !important;
@@ -388,7 +383,6 @@ def aplicar_estilos_authenticated():
         st.markdown(css, unsafe_allow_html=True)
     except Exception:
         pass
-    # Não precisa mais do clear_login_background, pois esta função já define o novo fundo.
 
 # =========================
 # Política de Senha
@@ -796,17 +790,15 @@ if st.session_state.get('__do_logout'):
 # =========================
 if st.session_state.tela == "login":
     limpar_todos_backgrounds()
-    # --- ATUALIZADO para usar URL ---
-    # Seu 'estilo.css' já define o fundo, mas chamamos de novo
-    # para garantir que ele tenha prioridade caso 'aplicar_estilos_authenticated'
-    # tenha sido chamado antes.
+    # Chama a função que prepara o CSS para o 'estilo.css' funcionar
     set_login_background_url(BACKGROUND_URL_LOGIN) 
     
     st.markdown("""
     <style id="login-card-safe">
+    /* A maioria dos estilos (fundo, etc.) vem do 'estilo.css' */
     section.main > div.block-container { max-width: 920px !important; margin: 0 auto !important; padding-top: 0 !important; padding-bottom: 0 !important; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
     .login-wrapper { width:100%; max-width:920px; margin:0 auto; box-sizing:border-box; display:flex; align-items:center; justify-content:center; padding:24px 0; }
-    /* Estilos do login-card e botões agora vêm do 'estilo.css' */
+    /* .login-card { ... } (Vem do estilo.css) */
     .brand-title { text-align:center; font-weight:700; font-size:22px; color:#E5E7EB; margin-bottom:6px; }
     .brand-subtitle { text-align:center; color: rgba(255,255,255,0.78); font-size:13px; margin-bottom:14px; }
     </style>
