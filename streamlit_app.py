@@ -22,6 +22,8 @@ from reportlab.pdfgen import canvas
 from streamlit.components.v1 import html as components_html
 import json
 import uuid  # Corrigido
+import io # Adicionado para o Excel
+import xlsxwriter # Adicionado para o Excel
 
 # --- CONSTANTES DE IMAGEM (URLs) ---
 # 👇 URLs corretas do GitHub que você forneceu 👇
@@ -129,9 +131,11 @@ def extrair_linha_relatorio(row, supabase_url=None):
         "Usuário": row["username"],
         "Data/Hora": row["data_hora"],
         "PDF": pdf_link,
+        "tipo": row["tipo"], # Adicionado para a função de economia
+        "dados_json": row["dados_json"] # Adicionado para a função de economia
     }
 
-# --- Nova Função de Economia ---
+# --- 💡 INÍCIO: Nova Função de Economia 💡 ---
 def calcular_economia(row):
     """
     Calcula a economia entre o cenário mais caro e o mais barato.
@@ -148,7 +152,7 @@ def calcular_economia(row):
         for c in cenarios:
             v = c.get("Total Final (R$)")
             if isinstance(v, str):
-                v = v.replace("R$", "").replace(".", "").replace(",", ".")
+                v = v.replace("R$", "").replace(".", "").replace(",", ".").strip()
             try:
                 valores.append(float(v))
             except:
@@ -162,6 +166,46 @@ def calcular_economia(row):
                 return f"R${economia:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return "" # Retorna vazio se não for 'cenarios' ou não houver economia
 # --- FIM: Nova Função de Economia ---
+
+# --- 💡 INÍCIO: Nova Função Gerar Excel 💡 ---
+def gerar_excel_moderno(df_flat):
+    output = io.BytesIO()
+    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+    worksheet = workbook.add_worksheet("Relatório")
+    
+    # Formatos
+    header_format = workbook.add_format({'bold': True, 'bg_color': '#DEEAF6', 'border': 1, 'align': 'left'})
+    money_format = workbook.add_format({'num_format': 'R$ #,##0.00', 'border': 1})
+    normal_format = workbook.add_format({'border': 1})
+    link_format = workbook.add_format({'font_color': 'blue', 'underline': 1, 'border': 1})
+
+    # Cabeçalhos
+    headers = list(df_flat.columns)
+    for col, header in enumerate(headers):
+        worksheet.write(0, col, header, header_format)
+        worksheet.set_column(col, col, 22)  # Largura das colunas
+
+    # Dados
+    for row_idx, row in df_flat.iterrows():
+        for col_idx, value in enumerate(row):
+            col_name = headers[col_idx]
+            
+            if col_name == "PDF" and value and "http" in value:
+                worksheet.write_url(row_idx+1, col_idx, value, link_format, string="Baixar PDF")
+            elif "R$" in str(value):
+                # Tenta converter para número para formatação correta
+                try:
+                    num_value = float(value.replace("R$", "").replace(".", "").replace(",", "."))
+                    worksheet.write_number(row_idx+1, col_idx, num_value, money_format)
+                except:
+                    worksheet.write(row_idx+1, col_idx, value, normal_format) # Fallback
+            else:
+                worksheet.write(row_idx+1, col_idx, value, normal_format)
+                
+    workbook.close()
+    output.seek(0)
+    return output
+# --- FIM: Nova Função Gerar Excel ---
 
 
 # --- Definição das colunas ---
@@ -238,7 +282,7 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
     try:
         supabase.storage.from_("pdfs").upload(
             path=pdf_filename,
-            file=pdf_bytes.getvalue(), # Corrigido: .getbuffer() -> .getvalue()
+            file=pdf_bytes.getvalue(), 
             file_options={"content-type": "application/pdf"}
         )
     except Exception as e:
@@ -255,7 +299,7 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
         "username": username,
         "tipo": tipo,
         "data_hora": data_hora,
-        "dados_json": json.dumps(dados, ensure_ascii=False, default=converter_json), # Corrigido: usa o conversor
+        "dados_json": json.dumps(dados, ensure_ascii=False, default=converter_json),
         "pdf_path": pdf_filename
     }
     
@@ -889,9 +933,7 @@ if st.session_state.get('__do_logout'):
 # SCREENS
 # =========================
 if st.session_state.tela == "login":
-    # 💡 REMOVIDO: limpar_todos_backgrounds()
-    # 💡 REMOVIDO: setup_login_background()
-    # 'estilo.css' (carregado no topo) agora controla 100% o fundo do login.
+    # O 'estilo.css' (carregado no topo) agora controla 100% o fundo do login.
     
     st.markdown("""
     <style id="login-card-safe">
@@ -1813,6 +1855,7 @@ else:
                 supabase_public_url = f"{url}/storage/v1/object/public"
                 
                 # 2. Criar o DataFrame "achatado"
+                # (Passamos o 'df' original para a função)
                 df_flat = pd.DataFrame([extrair_linha_relatorio(row, supabase_public_url) for _, row in df.iterrows()])
 
                 # 3. Adiciona coluna Economia (usando o 'df' original)
@@ -1825,18 +1868,28 @@ else:
                 ]
                 df_flat = df_flat[[c for c in colunas if c in df_flat.columns]]
 
-                # 5. Botão de download do CSV "achatado" (com separador ;)
+                # 5. Botão de download do Excel (com sep=;)
+                excel_bytes = gerar_excel_moderno(df_flat)
+                st.download_button(
+                    "⬇️ Baixar relatório Excel (moderno)",
+                    data=excel_bytes,
+                    file_name="relatorio_analises.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    help="Clique para baixar o relatório já formatado para Excel!"
+                )
+                
+                # 6. Botão de download do CSV "achatado" (com separador ;)
                 st.download_button(
                     "⬇️ Baixar relatório CSV (Excel)",
-                    data=df_flat.to_csv(index=False, sep=";", encoding="utf-8"), # Aplicada a mudança
+                    data=df_flat.to_csv(index=False, sep=";", encoding="utf-8"),
                     file_name="relatorio_analises.csv",
                     mime="text/csv",
-                    help="Clique para baixar o relatório já formatado para Excel!"
+                    help="Clique para baixar o relatório em CSV simples (compatível com Excel)."
                 )
                 
                 st.markdown("---") # Divisor
 
-                # 6. Mostrar os dados na tela com links HTML (e Economia)
+                # 7. Mostrar os dados na tela com links HTML (e Economia)
                 for idx, row in df_flat.iterrows():
                     st.markdown(f"""
                     <div style="border:1px solid #444;padding:10px;border-radius:8px;margin-bottom:8px;">
