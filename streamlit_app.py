@@ -21,10 +21,10 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfgen import canvas
 from streamlit.components.v1 import html as components_html
 import json
-import uuid
-import io 
-import xlsxwriter 
-import pytz 
+import uuid  # Corrigido
+import io # Adicionado para o Excel
+import xlsxwriter # Adicionado para o Excel
+import pytz # --- 💡 NOVA ADIÇÃO 💡 ---
 
 # --- CONSTANTES DE IMAGEM (URLs) ---
 FAVICON_URL = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
@@ -32,7 +32,7 @@ LOGO_URL_LOGIN = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/ass
 LOGO_URL_SIDEBAR = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
 # ------------------------------------
 
-# --- Fuso Horário ---
+# --- 💡 NOVA ADIÇÃO: Fuso Horário 💡 ---
 tz_brasilia = pytz.timezone('America/Sao_Paulo')
 # ------------------------------------
 
@@ -108,6 +108,7 @@ def extrair_linha_relatorio(row, supabase_url=None):
     pdf_link = ""
     if row["pdf_path"]:
         if supabase_url:
+            # --- 💡 CORREÇÃO DO LINK DUPLICADO 💡 ---
             pdf_link = f"{supabase_url}/pdfs/{row['pdf_path']}"
         else:
             pdf_link = "#" 
@@ -388,29 +389,6 @@ def save_user_db(df_users: pd.DataFrame):
 # =========================
 # Background helpers (Login)
 # =========================
-def setup_login_background():
-    """
-    Esta função agora só garante que o .stApp seja transparente,
-    permitindo que o 'estilo.css' (que define o fundo) funcione.
-    """
-    try:
-        css = """
-        <style id="login-bg-setup">
-        /* Garante que o app é transparente para o CSS funcionar */
-        html, body, .stApp { 
-            background: transparent !important; 
-        }
-        </style>
-        """
-        st.markdown(css, unsafe_allow_html=True)
-    except Exception as e:
-        st.warning(f"Não foi possível aplicar estilos de fundo: {e}")
-
-
-def limpar_todos_backgrounds():
-    st.markdown('<style id="login-bg-setup"></style>', unsafe_allow_html=True)
-    st.markdown('<style id="app-auth-style"></style>', unsafe_allow_html=True)
-
 def show_logo_url(url: str, width: int = 140):
     st.image(url, width=width)
     st.markdown("""
@@ -838,7 +816,7 @@ def ir_para_reset(): st.session_state.tela = "reset_password"
 def ir_para_force_change(): st.session_state.tela = "force_change_password"
 def ir_para_relatorio_analises(): st.session_state.tela = "relatorio_analises"
 def ir_para_terms(): st.session_state.tela = "terms_consent"
-def ir_para_dashboard(): st.session_state.tela = "dashboard" # --- 💡 NOVA ADIÇÃO 💡 ---
+def ir_para_dashboard(): st.session_state.tela = "dashboard"
 
 
 def limpar_dados_comparativos():
@@ -878,7 +856,6 @@ def renderizar_sidebar():
         st.button("💬 Abrir Ticket", on_click=lambda: st.session_state.update({"tela": "tickets"}), use_container_width=True)
 
         if user_is_admin():
-            # --- 💡 NOVA ADIÇÃO 💡 ---
             st.button("📊 Dashboard de Análises", on_click=ir_para_dashboard, use_container_width=True)
             st.button("👤 Gerenciar Usuários", on_click=ir_para_admin, use_container_width=True)
             
@@ -1325,7 +1302,7 @@ else:
         
     aplicar_estilos_authenticated() # Aplica o fundo de gradiente
     renderizar_sidebar()
-    st.markdown("<div class'main-container'>", unsafe_allow_html=True)
+    st.markdown("<div class='main-container'>", unsafe_allow_html=True)
 
     if st.session_state.tela == "home":
         st.title("🏠 Home")
@@ -1381,7 +1358,7 @@ else:
                 
                 with col2:
                     meses_map = {
-                        'Janeiro': 1, 'Fevereiro': 2, 'Março': 3, 'Abril': 4, 'Maio': 5, 'Junho': 6,
+                        'Janeiro': 1, 'Fevereiro': 2, 'Março': 3, 'Abril': 4, 'Maio': 5, 'Junho': 6, # <-- CORRIGIDO
                         'Julho': 7, 'Agosto': 8, 'Setembro': 9, 'Outubro': 10, 'Novembro': 11, 'Dezembro': 12
                     }
                     opcoes_mes = ["Todos"] + list(meses_map.keys())
