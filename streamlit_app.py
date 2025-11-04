@@ -21,15 +21,17 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfgen import canvas
 from streamlit.components.v1 import html as components_html
 import json
-import uuid
+import uuid  # Corrigido
 
 # --- CONSTANTES DE IMAGEM (URLs) ---
+# 👇 URLs corretas do GitHub que você forneceu 👇
 FAVICON_URL = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
 LOGO_URL_LOGIN = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
 LOGO_URL_SIDEBAR = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
+# O background agora é controlado 100% pelo 'estilo.css'
 # ------------------------------------
 
-# --- DEFINIÇÃO DE HELPERS MOVIDA PARA O TOPO ---
+# --- 💡 CORREÇÃO: Funções movidas para o topo ---
 def resource_path(filename: str) -> str:
     """
     Resolve a path relative to this file or current working dir.
@@ -51,6 +53,7 @@ def load_css(file_path):
             with open(full_path) as f:
                 st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
         else:
+            # Não emite aviso se o arquivo simplesmente não existir
             pass 
     except Exception as e:
         st.warning(f"Não foi possível carregar o 'estilo.css': {e}")
@@ -84,6 +87,50 @@ def converter_json(obj):
     raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 # --- FIM ---
 
+# --- 💡 INÍCIO: Nova Função de Relatório 💡 ---
+def extrair_linha_relatorio(row, supabase_url=None):
+    """
+    Recebe uma linha do DataFrame de análises e retorna um dicionário 'achatado' com os campos principais.
+    """
+    try:
+        dados = json.loads(row["dados_json"])
+    except Exception:
+        dados = row["dados_json"]
+
+    # Se for simulação de cenários, pega o melhor cenário
+    if row["tipo"] == "cenarios":
+        melhor = dados.get("melhor", {})
+        cliente = melhor.get("Cliente", "-")
+        placa = melhor.get("Placa", "-")
+        servico = melhor.get("Serviço", "-")
+        valor_final = melhor.get("Total Final (R$)", "-")
+    elif row["tipo"] == "sla_mensal":
+        cliente = dados.get("cliente", "-")
+        placa = dados.get("placa", "-")
+        servico = dados.get("tipo_servico", "-")
+        valor_final = f'R${dados.get("mensalidade", 0) - dados.get("desconto", 0):,.2f}'.replace(",", "X").replace(".", ",").replace("X", ".")
+    else:
+        cliente = placa = servico = valor_final = "-"
+
+    # Monta link do PDF se possível
+    pdf_link = ""
+    if row["pdf_path"]:
+        if supabase_url:
+            # Monta o link público do Supabase Storage
+            pdf_link = f"{supabase_url}/storage/v1/object/public/pdfs/{row['pdf_path']}"
+        else:
+            pdf_link = "#" # Link fallback
+
+    return {
+        "Cliente": cliente,
+        "Placa": placa,
+        "Serviço": servico,
+        "Valor Final": valor_final,
+        "Usuário": row["username"],
+        "Data/Hora": row["data_hora"],
+        "PDF": pdf_link,
+    }
+# --- FIM: Nova Função de Relatório ---
 
 # --- Definição das colunas ---
 ANALISES_COLS = ["id", "username", "tipo", "data_hora", "dados_json", "pdf_path"]
@@ -102,7 +149,7 @@ SUPERADMIN_USERNAME = st.secrets.get("SUPERADMIN_USERNAME", "lucas.sureira")
 try:
     st.set_page_config(
         page_title="Frotas Vamos SLA",
-        page_icon=FAVICON_URL,
+        page_icon=FAVICON_URL,  # <-- ATUALIZADO
         layout="centered",
         initial_sidebar_state="expanded"
     )
@@ -114,6 +161,7 @@ except Exception as e:
         initial_sidebar_state="expanded"
     )
 
+# Carregue o CSS (agora 'resource_path' está definida)
 load_css("estilo.css")
 
 # =========================
@@ -121,7 +169,6 @@ load_css("estilo.css")
 # =========================
 
 # --- Análises ---
-# --- 💡 CORREÇÃO 💡 ---
 @st.cache_data(ttl=60)
 def load_analises():
     try:
@@ -137,7 +184,6 @@ def load_analises():
             df[col] = pd.Series(dtype='object')
     
     return df[ANALISES_COLS].fillna("")
-# --- FIM DA CORREÇÃO ---
 
 def save_analises(df):
     try:
@@ -160,7 +206,7 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
     try:
         supabase.storage.from_("pdfs").upload(
             path=pdf_filename,
-            file=pdf_bytes.getvalue(), 
+            file=pdf_bytes.getvalue(), # Corrigido: .getbuffer() -> .getvalue()
             file_options={"content-type": "application/pdf"}
         )
     except Exception as e:
@@ -177,7 +223,7 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
         "username": username,
         "tipo": tipo,
         "data_hora": data_hora,
-        "dados_json": json.dumps(dados, ensure_ascii=False, default=converter_json),
+        "dados_json": json.dumps(dados, ensure_ascii=False, default=converter_json), # Corrigido: usa o conversor
         "pdf_path": pdf_filename
     }
     
@@ -188,7 +234,6 @@ def registrar_analise(username, tipo, dados, pdf_bytes):
         st.error(f"Erro ao registrar análise no Supabase: {e}")
 
 # --- Tickets ---
-# --- 💡 CORREÇÃO 💡 ---
 @st.cache_data(ttl=60)
 def load_tickets():
     try:
@@ -204,7 +249,6 @@ def load_tickets():
             df[col] = pd.Series(dtype='object')
     
     return df[TICKET_COLUMNS].fillna("")
-# --- FIM DA CORREÇÃO ---
 
 def save_tickets(df):
     try:
@@ -227,7 +271,6 @@ def hash_password(password: str) -> str:
     except Exception:
         return hashlib.sha256(password.encode()).hexdigest()
 
-# --- 💡 CORREÇÃO 💡 ---
 @st.cache_data(ttl=60)
 def load_user_db() -> pd.DataFrame:
     try:
@@ -273,7 +316,6 @@ def load_user_db() -> pd.DataFrame:
             
     # Garante a ordem e preenche NaNs no final
     return df[REQUIRED_USER_COLUMNS].fillna("")
-# --- FIM DA CORREÇÃO ---
 
 def save_user_db(df_users: pd.DataFrame):
     try:
@@ -292,7 +334,7 @@ def save_user_db(df_users: pd.DataFrame):
         st.error(f"Erro ao salvar usuários no Supabase: {e}")
 
 # =========================
-# Background helpers (Login)
+# Background helpers (Login) - ATUALIZADO
 # =========================
 def setup_login_background():
     """
@@ -387,7 +429,7 @@ def verify_password(stored_hash: str, provided_password: str) -> Tuple[bool, boo
     return ok, bool(ok)
 
 # =========================
-# Tema Autenticado
+# Tema Autenticado (ATUALIZADO)
 # =========================
 def aplicar_estilos_authenticated():
     css = """
@@ -399,7 +441,8 @@ def aplicar_estilos_authenticated():
         background: radial-gradient(circle at 10% 10%, rgba(15,23,42,0.96) 0%, rgba(11,17,24,1) 50%) !important;
     }
     
-    /* Garante que o CSS de esconder o menu seja aplicado */
+    /* Garante que o CSS de esconder o menu seja aplicado 
+       (seu estilo.css já faz isso, mas é bom garantir) */
     header[data-testid="stHeader"], #MainMenu, footer {
         display: none !important;
     }
@@ -1741,7 +1784,6 @@ else:
                 # --- 💡 INÍCIO DA NOVA LÓGICA DE RELATÓRIO 💡 ---
                 
                 # 1. Construir a URL pública do Supabase
-                # Use o SUPABASE_URL dos secrets
                 supabase_public_url = f"{url}/storage/v1/object/public"
                 
                 # 2. Criar o DataFrame "achatado"
