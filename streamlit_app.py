@@ -270,29 +270,6 @@ def save_user_db(df_users: pd.DataFrame):
 # =========================
 # Background helpers (Login) - ATUALIZADO
 # =========================
-def setup_login_background():
-    """
-    Esta função agora só garante que o .stApp seja transparente,
-    permitindo que o 'estilo.css' (que define o fundo) funcione.
-    """
-    try:
-        css = """
-        <style id="login-bg-setup">
-        /* Garante que o app é transparente para o CSS funcionar */
-        html, body, .stApp { 
-            background: transparent !important; 
-        }
-        </style>
-        """
-        st.markdown(css, unsafe_allow_html=True)
-    except Exception as e:
-        st.warning(f"Não foi possível aplicar estilos de fundo: {e}")
-
-
-def limpar_todos_backgrounds():
-    st.markdown('<style id="login-bg-setup"></style>', unsafe_allow_html=True)
-    st.markdown('<style id="app-auth-style"></style>', unsafe_allow_html=True)
-
 def show_logo_url(url: str, width: int = 140):
     """Mostra uma imagem de uma URL e esconde o botão de expandir."""
     st.image(url, width=width)
@@ -374,7 +351,6 @@ def aplicar_estilos_authenticated():
     .stApp {
         background-image: none !important;
         background: radial-gradient(circle at 10% 10%, rgba(15,23,42,0.96) 0%, rgba(11,17,24,1) 50%) !important;
-        color: #E5E7EB !important;
     }
     
     /* Garante que o CSS de esconder o menu seja aplicado 
@@ -794,10 +770,8 @@ if st.session_state.get('__do_logout'):
 # SCREENS
 # =========================
 if st.session_state.tela == "login":
-    limpar_todos_backgrounds()
-    # Chama a função que prepara o CSS para o 'estilo.css' funcionar
-    # O 'estilo.css' define a imagem de fundo.
-    setup_login_background() 
+    # 💡 REMOVIDO: limpar_todos_backgrounds() e setup_login_background()
+    # Agora o 'estilo.css' controla 100% o fundo do login.
     
     st.markdown("""
     <style id="login-card-safe">
@@ -811,7 +785,6 @@ if st.session_state.tela == "login":
     """, unsafe_allow_html=True)
     
     st.markdown('<div class="login-wrapper">', unsafe_allow_html=True)
-    # Adicionando o 'login-card' que seu CSS espera
     st.markdown('<div class="login-card">', unsafe_allow_html=True) 
     
     st.markdown("<div style='text-align: center; margin-bottom: 12px;'>", unsafe_allow_html=True)
@@ -877,7 +850,7 @@ if st.session_state.tela == "login":
 # Register
 # ---------------------------
 elif st.session_state.tela == "register":
-    limpar_todos_backgrounds()
+    # 💡 REMOVIDO: limpar_todos_backgrounds()
     aplicar_estilos_authenticated()
     st.markdown("<div class='main-container'>", unsafe_allow_html=True)
     st.title("🆕 Sign up")
@@ -975,7 +948,7 @@ elif st.session_state.tela == "register":
 # Screens: Forgot/Reset/Force/Terms
 # =========================
 elif st.session_state.tela == "forgot_password":
-    limpar_todos_backgrounds()
+    # 💡 REMOVIDO: limpar_todos_backgrounds()
     aplicar_estilos_authenticated()
     st.markdown("<div class='main-container'>", unsafe_allow_html=True)
     st.title("🔐 Reset Password")
@@ -1008,7 +981,7 @@ elif st.session_state.tela == "forgot_password":
 
 
 elif st.session_state.tela == "reset_password":
-    limpar_todos_backgrounds()
+    # 💡 REMOVIDO: limpar_todos_backgrounds()
     aplicar_estilos_authenticated()
     st.markdown("<div class='main-container'>", unsafe_allow_html=True)
     st.title("🔁 Redefinir senha")
@@ -1072,7 +1045,7 @@ elif st.session_state.tela == "reset_password":
 
 
 elif st.session_state.tela == "force_change_password":
-    limpar_todos_backgrounds()
+    # 💡 REMOVIDO: limpar_todos_backgrounds()
     aplicar_estilos_authenticated()
     st.markdown("<div class='main-container'>", unsafe_allow_html=True)
     st.title("🔒 Alteração obrigatória de senha")
@@ -1095,7 +1068,7 @@ elif st.session_state.tela == "force_change_password":
                 st.error("As senhas não conferem."); st.stop()
             ok, errs = validate_password_policy(new_pass, username=uname, email=email)
             if not ok:
-                st.error("Regras de senha não atendidas:\n- "D" + "\n- ".join(errs)); st.stop()
+                st.error("Regras de senha não atendidas:\n- " + "\n- ".join(errs)); st.stop()
             same, _ = verify_password(df.loc[idx, "password"], new_pass)
             if same:
                 st.error("A nova senha não pode ser igual à senha atual."); st.stop()
@@ -1116,7 +1089,7 @@ elif st.session_state.tela == "force_change_password":
 # Terms / LGPD (full)
 # =========================
 elif st.session_state.tela == "terms_consent":
-    limpar_todos_backgrounds()
+    # 💡 REMOVIDO: limpar_todos_backgrounds()
     aplicar_estilos_authenticated()
     st.markdown("<div class='main-container'>", unsafe_allow_html=True)
     st.title("Termos e Condições de Uso e Política de Privacidade (LGPD)")
@@ -1210,7 +1183,7 @@ else:
         safe_rerun()
         st.stop()
         
-    limpar_todos_backgrounds()
+    # 💡 REMOVIDO: limpar_todos_backgrounds()
     aplicar_estilos_authenticated() # Aplica o fundo de gradiente
     renderizar_sidebar()
     st.markdown("<div class='main-container'>", unsafe_allow_html=True)
