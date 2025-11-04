@@ -6,3 +6,4 @@ reportlab
 passlib[bcrypt]
 supabase
 xlsxwriter
+pytz
