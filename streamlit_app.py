@@ -131,8 +131,9 @@ def extrair_linha_relatorio(row, supabase_url=None):
         "Usuário": row["username"],
         "Data/Hora": row["data_hora"],
         "PDF": pdf_link,
-        "tipo": row["tipo"], # Adicionado para a função de economia
-        "dados_json": row["dados_json"] # Adicionado para a função de economia
+        # Adicionados para a função de economia
+        "tipo": row["tipo"],
+        "dados_json": row["dados_json"]
     }
 
 # --- 💡 INÍCIO: Nova Função de Economia 💡 ---
@@ -1340,7 +1341,6 @@ else:
         safe_rerun()
         st.stop()
         
-    # 💡 REMOVIDO: limpar_todos_backgrounds()
     aplicar_estilos_authenticated() # Aplica o fundo de gradiente
     renderizar_sidebar()
     st.markdown("<div class='main-container'>", unsafe_allow_html=True)
@@ -1757,8 +1757,7 @@ else:
                     st.markdown("---")
                     st.write("Peças adicionadas:")
                     opcoes_pecas = [f"{p['nome']} - {formatar_moeda(p['valor'])}" for p in st.session_state.pecas_atuais]
-                    # --- 💡 CORREÇÃO DE BUG 💡 ---
-                    pecas_para_remover = st.multiselect("Selecione para remover:", options=opcoes_pecas) # Corrigido de opcoes_locas
+                    pecas_para_remover = st.multiselect("Selecione para remover:", options=opcoes_pecas)
                     if st.button("🗑️ Remover Selecionadas", type="secondary", use_container_width=True):
                         if pecas_para_remover:
                             nomes_para_remover = [item.split(' - ')[0] for item in pecas_para_remover]
@@ -1868,7 +1867,7 @@ else:
                 ]
                 df_flat = df_flat[[c for c in colunas if c in df_flat.columns]]
 
-                # 5. Botão de download do Excel (com sep=;)
+                # 5. Botão de download do Excel
                 excel_bytes = gerar_excel_moderno(df_flat)
                 st.download_button(
                     "⬇️ Baixar relatório Excel (moderno)",
