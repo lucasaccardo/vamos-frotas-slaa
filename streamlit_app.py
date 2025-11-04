@@ -24,21 +24,21 @@ import json
 import uuid  # Corrigido
 import io # Adicionado para o Excel
 import xlsxwriter # Adicionado para o Excel
+import pytz # --- 💡 NOVA ADIÇÃO 💡 ---
 
 # --- CONSTANTES DE IMAGEM (URLs) ---
-# 👇 URLs corretas do GitHub que você forneceu 👇
 FAVICON_URL = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
 LOGO_URL_LOGIN = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
 LOGO_URL_SIDEBAR = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
-# O background agora é controlado 100% pelo 'estilo.css'
 # ------------------------------------
 
-# --- 💡 CORREÇÃO: Funções movidas para o topo ---
+# --- 💡 NOVA ADIÇÃO: Fuso Horário 💡 ---
+tz_brasilia = pytz.timezone('America/Sao_Paulo')
+# ------------------------------------
+
+
+# --- Funções de Path e CSS ---
 def resource_path(filename: str) -> str:
-    """
-    Resolve a path relative to this file or current working dir.
-    Works on Streamlit Cloud and locally.
-    """
     try:
         base = os.path.dirname(__file__)
     except Exception:
@@ -46,20 +46,16 @@ def resource_path(filename: str) -> str:
     return os.path.join(base, filename)
 
 def load_css(file_path):
-    """
-    Carrega um arquivo CSS local de forma robusta.
-    """
     full_path = resource_path(file_path)
     try:
         if os.path.exists(full_path):
             with open(full_path) as f:
                 st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
         else:
-            # Não emite aviso se o arquivo simplesmente não existir
             pass 
     except Exception as e:
         st.warning(f"Não foi possível carregar o 'estilo.css': {e}")
-# --- FIM DA CORREÇÃO ---
+# --- FIM ---
 
 
 # --- INICIALIZAÇÃO DO SUPABASE ---
@@ -77,7 +73,6 @@ supabase: Client = create_client(url, key)
 
 # --- Conversor de JSON para Numpy/Pandas ---
 def converter_json(obj):
-    """Converte tipos não-serializáveis (como numpy) para o JSON."""
     if isinstance(obj, (np.integer, np.int64)):
         return int(obj)
     if isinstance(obj, (np.floating, np.float64)):
@@ -91,15 +86,11 @@ def converter_json(obj):
 
 # --- Função de Relatório (Achatada) ---
 def extrair_linha_relatorio(row, supabase_url=None):
-    """
-    Recebe uma linha do DataFrame de análises e retorna um dicionário 'achatado' com os campos principais.
-    """
     try:
         dados = json.loads(row["dados_json"])
     except Exception:
         dados = row["dados_json"]
 
-    # Se for simulação de cenários, pega o melhor cenário
     if row["tipo"] == "cenarios":
         melhor = dados.get("melhor", {})
         cliente = melhor.get("Cliente", "-")
@@ -114,14 +105,12 @@ def extrair_linha_relatorio(row, supabase_url=None):
     else:
         cliente = placa = servico = valor_final = "-"
 
-    # Monta link do PDF se possível
     pdf_link = ""
     if row["pdf_path"]:
         if supabase_url:
-            # --- 💡 CORREÇÃO DO LINK DUPLICADO 💡 ---
             pdf_link = f"{supabase_url}/pdfs/{row['pdf_path']}"
         else:
-            pdf_link = "#" # Link fallback
+            pdf_link = "#" 
 
     return {
         "Cliente": cliente,
@@ -131,17 +120,12 @@ def extrair_linha_relatorio(row, supabase_url=None):
         "Usuário": row["username"],
         "Data/Hora": row["data_hora"],
         "PDF": pdf_link,
-        # Adicionados para a função de economia
         "tipo": row["tipo"],
         "dados_json": row["dados_json"]
     }
 
-# --- 💡 INÍCIO: Nova Função de Economia 💡 ---
+# --- Função de Economia ---
 def calcular_economia(row):
-    """
-    Calcula a economia entre o cenário mais caro e o mais barato.
-    """
-    # Só calcula para tipo "cenarios"
     if row.get("tipo") == "cenarios":
         try:
             dados = json.loads(row["dados_json"])
@@ -159,34 +143,30 @@ def calcular_economia(row):
             except:
                 pass
         
-        if len(valores) > 1: # Só calcula se houver mais de 1 cenário
+        if len(valores) > 1: 
             menor = min(valores)
             maior = max(valores)
             economia = maior - menor
             if economia > 0:
                 return f"R${economia:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    return "" # Retorna vazio se não for 'cenarios' ou não houver economia
-# --- FIM: Nova Função de Economia ---
+    return "" 
 
-# --- 💡 INÍCIO: Nova Função Gerar Excel 💡 ---
+# --- Função Gerar Excel ---
 def gerar_excel_moderno(df_flat):
     output = io.BytesIO()
     workbook = xlsxwriter.Workbook(output, {'in_memory': True})
     worksheet = workbook.add_worksheet("Relatório")
     
-    # Formatos
     header_format = workbook.add_format({'bold': True, 'bg_color': '#DEEAF6', 'border': 1, 'align': 'left'})
     money_format = workbook.add_format({'num_format': 'R$ #,##0.00', 'border': 1})
     normal_format = workbook.add_format({'border': 1})
     link_format = workbook.add_format({'font_color': 'blue', 'underline': 1, 'border': 1})
 
-    # Cabeçalhos
     headers = list(df_flat.columns)
     for col, header in enumerate(headers):
         worksheet.write(0, col, header, header_format)
-        worksheet.set_column(col, col, 22)  # Largura das colunas
+        worksheet.set_column(col, col, 22)  
 
-    # Dados
     for row_idx, row in df_flat.iterrows():
         for col_idx, value in enumerate(row):
             col_name = headers[col_idx]
@@ -194,19 +174,17 @@ def gerar_excel_moderno(df_flat):
             if col_name == "PDF" and value and "http" in value:
                 worksheet.write_url(row_idx+1, col_idx, value, link_format, string="Baixar PDF")
             elif "R$" in str(value):
-                # Tenta converter para número para formatação correta
                 try:
                     num_value = float(value.replace("R$", "").replace(".", "").replace(",", "."))
                     worksheet.write_number(row_idx+1, col_idx, num_value, money_format)
                 except:
-                    worksheet.write(row_idx+1, col_idx, value, normal_format) # Fallback
+                    worksheet.write(row_idx+1, col_idx, value, normal_format) 
             else:
                 worksheet.write(row_idx+1, col_idx, value, normal_format)
                 
     workbook.close()
     output.seek(0)
     return output
-# --- FIM: Nova Função Gerar Excel ---
 
 
 # --- Definição das colunas ---
@@ -226,7 +204,7 @@ SUPERADMIN_USERNAME = st.secrets.get("SUPERADMIN_USERNAME", "lucas.sureira")
 try:
     st.set_page_config(
         page_title="Frotas Vamos SLA",
-        page_icon=FAVICON_URL,  # <-- ATUALIZADO
+        page_icon=FAVICON_URL,
         layout="centered",
         initial_sidebar_state="expanded"
     )
@@ -238,7 +216,6 @@ except Exception as e:
         initial_sidebar_state="expanded"
     )
 
-# Carregue o CSS (agora 'resource_path' está definida)
 load_css("estilo.css")
 
 # =========================
@@ -255,7 +232,6 @@ def load_analises():
         st.error(f"Erro ao carregar análises do Supabase: {e}")
         df = pd.DataFrame(columns=ANALISES_COLS)
 
-    # Garante que todas as colunas existam, mesmo se o DF estiver vazio
     for col in ANALISES_COLS:
         if col not in df.columns:
             df[col] = pd.Series(dtype='object')
@@ -276,7 +252,8 @@ def save_analises(df):
 
 def registrar_analise(username, tipo, dados, pdf_bytes):
     novo_id = str(uuid.uuid4())
-    data_hora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # --- 💡 NOVA ADIÇÃO: Fuso Horário 💡 ---
+    data_hora = datetime.now(tz_brasilia).strftime("%Y-%m-%d %H:%M:%S")
     
     pdf_filename = f"{tipo}_{username}_{novo_id}_{data_hora.replace(' ','_').replace(':','-')}.pdf"
     
@@ -320,7 +297,6 @@ def load_tickets():
         st.error(f"Erro ao carregar tickets do Supabase: {e}")
         df = pd.DataFrame(columns=TICKET_COLUMNS)
 
-    # Garante que todas as colunas existam, mesmo se o DF estiver vazio
     for col in TICKET_COLUMNS:
         if col not in df.columns:
             df[col] = pd.Series(dtype='object')
@@ -358,7 +334,6 @@ def load_user_db() -> pd.DataFrame:
         st.info("Tentando criar tabela de usuários inicial...")
         df = pd.DataFrame(columns=REQUIRED_USER_COLUMNS)
 
-    # Garante que todas as colunas existam ANTES da lógica do superadmin
     for col in REQUIRED_USER_COLUMNS:
         if col not in df.columns:
             df[col] = pd.Series(dtype='object')
@@ -366,6 +341,10 @@ def load_user_db() -> pd.DataFrame:
     if df.empty or SUPERADMIN_USERNAME not in df["username"].values:
         st.warning("Nenhum usuário encontrado, criando SuperAdmin padrão...")
         tmp_pwd = (st.secrets.get("SUPERADMIN_DEFAULT_PASSWORD", "") or "").strip()
+        
+        # --- 💡 NOVA ADIÇÃO: Fuso Horário 💡 ---
+        now_brasilia = datetime.now(tz_brasilia).strftime("%Y-%m-%d %H:%M:%S")
+
         admin_defaults = {
             "username": SUPERADMIN_USERNAME,
             "password": hash_password(tmp_pwd) if tmp_pwd else "",
@@ -377,21 +356,19 @@ def load_user_db() -> pd.DataFrame:
             "accepted_terms_on": "",
             "reset_token": "",
             "reset_expires_at": "",
-            "last_password_change": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") if tmp_pwd else "",
+            "last_password_change": now_brasilia if tmp_pwd else "",
             "force_password_reset": "" if tmp_pwd else "1",
         }
         
         try:
             supabase.table('users').insert(admin_defaults).execute()
             st.cache_data.clear()
-            # Recarrega o df para ter o admin
             response = supabase.table('users').select("*").execute()
             df = pd.DataFrame(response.data)
         except Exception as e:
             st.error(f"FALHA CRÍTICA: Não foi possível criar o SuperAdmin no Supabase. {e}")
             st.stop()
             
-    # Garante a ordem e preenche NaNs no final
     return df[REQUIRED_USER_COLUMNS].fillna("")
 
 def save_user_db(df_users: pd.DataFrame):
@@ -413,6 +390,29 @@ def save_user_db(df_users: pd.DataFrame):
 # =========================
 # Background helpers (Login)
 # =========================
+def setup_login_background():
+    """
+    Esta função agora só garante que o .stApp seja transparente,
+    permitindo que o 'estilo.css' (que define o fundo) funcione.
+    """
+    try:
+        css = """
+        <style id="login-bg-setup">
+        /* Garante que o app é transparente para o CSS funcionar */
+        html, body, .stApp { 
+            background: transparent !important; 
+        }
+        </style>
+        """
+        st.markdown(css, unsafe_allow_html=True)
+    except Exception as e:
+        st.warning(f"Não foi possível aplicar estilos de fundo: {e}")
+
+
+def limpar_todos_backgrounds():
+    st.markdown('<style id="login-bg-setup"></style>', unsafe_allow_html=True)
+    st.markdown('<style id="app-auth-style"></style>', unsafe_allow_html=True)
+
 def show_logo_url(url: str, width: int = 140):
     """Mostra uma imagem de uma URL e esconde o botão de expandir."""
     st.image(url, width=width)
@@ -911,7 +911,7 @@ if st.session_state.get('__do_logout'):
 # SCREENS
 # =========================
 if st.session_state.tela == "login":
-    # 💡 O 'estilo.css' (carregado no topo) agora controla 100% o fundo do login.
+    # O 'estilo.css' (carregado no topo) agora controla 100% o fundo do login.
     
     st.markdown("""
     <style id="login-card-safe">
@@ -965,7 +965,7 @@ if st.session_state.tela == "login":
                     if needs_up:
                         idx = df_users.index[df_users["username"] == username][0]
                         df_users.loc[idx, "password"] = hash_password(password)
-                        df_users.loc[idx, "last_password_change"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                        df_users.loc[idx, "last_password_change"] = datetime.now(tz_brasilia).strftime("%Y-%m-%d %H:%M:%S")
                         save_user_db(df_users)
                 except Exception:
                     pass
@@ -1053,7 +1053,7 @@ elif st.session_state.tela == "register":
                     if not df.loc[idx, "matricula"]: df.loc[idx, "matricula"] = mat
                     df.loc[idx, "password"] = hash_password(password)
                     if df.loc[idx, "status"] == "": df.loc[idx, "status"] = "pendente"
-                    df.loc[idx, "last_password_change"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                    df.loc[idx, "last_password_change"] = datetime.now(tz_brasilia).strftime("%Y-%m-%d %H:%M:%S")
                     df.loc[idx, "force_password_reset"] = ""
                     save_user_db(df)
                     st.success("Cadastro atualizado! Aguarde aprovação (se pendente).")
@@ -1070,7 +1070,7 @@ elif st.session_state.tela == "register":
                         "matricula": mat,
                         "email": mail,
                         "status": "pendente",
-                        "last_password_change": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
+                        "last_password_change": datetime.now(tz_brasilia).strftime("%Y-%m-%d %H:%M:%S"),
                         "force_password_reset": ""
                     })
                     try:
@@ -1107,7 +1107,7 @@ elif st.session_state.tela == "forgot_password":
                 st.warning("Seu cadastro ainda não foi aprovado pelo administrador.")
             else:
                 token = secrets.token_urlsafe(32)
-                expires = (datetime.utcnow() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+                expires = (datetime.now(tz_brasilia) + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
                 df.loc[idx, "reset_token"] = token
                 df.loc[idx, "reset_expires_at"] = expires
                 save_user_db(df) # Salva o token no Supabase
@@ -1152,9 +1152,14 @@ elif st.session_state.tela == "reset_password":
                 idx = rows.index[0]
                 try:
                     exp = datetime.strptime(df.loc[idx, "reset_expires_at"], "%Y-%m-%d %H:%M:%S")
+                    # Compara com o fuso horário correto
+                    exp_aware = tz_brasilia.localize(exp)
+                    now_aware = datetime.now(tz_brasilia)
                 except Exception:
-                    exp = datetime.utcnow() - timedelta(minutes=1)
-                if datetime.utcnow() > exp:
+                    exp_aware = datetime.now(tz_brasilia) - timedelta(minutes=1)
+                    now_aware = datetime.now(tz_brasilia)
+                    
+                if now_aware > exp_aware:
                     st.error("Token expirado. Solicite novamente.")
                 else:
                     username = df.loc[idx, "username"]
@@ -1168,7 +1173,7 @@ elif st.session_state.tela == "reset_password":
                     df.loc[idx, "password"] = hash_password(new_pass)
                     df.loc[idx, "reset_token"] = ""
                     df.loc[idx, "reset_expires_at"] = ""
-                    df.loc[idx, "last_password_change"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+                    df.loc[idx, "last_password_change"] = datetime.now(tz_brasilia).strftime("%Y-%m-%d %H:%M:%S")
                     df.loc[idx, "force_password_reset"] = ""
                     save_user_db(df)
                     st.success("Senha redefinida com sucesso! Faça login novamente.")
@@ -1209,7 +1214,7 @@ elif st.session_state.tela == "force_change_password":
             if same:
                 st.error("A nova senha não pode ser igual à senha atual."); st.stop()
             df.loc[idx, "password"] = hash_password(new_pass)
-            df.loc[idx, "last_password_change"] = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+            df.loc[idx, "last_password_change"] = datetime.now(tz_brasilia).strftime("%Y-%m-%d %H:%M:%S")
             df.loc[idx, "force_password_reset"] = ""
             save_user_db(df)
             st.success("Senha atualizada com sucesso.")
@@ -1293,7 +1298,7 @@ elif st.session_state.tela == "terms_consent":
     consent = st.checkbox("Eu li e concordo com os Termos e Condições.")
     if st.button("Continuar", disabled=not consent, type="primary"):
         df_users = load_user_db()
-        now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        now = datetime.now(tz_brasilia).strftime('%Y-%m-%d %H:%M:%S')
         username = st.session_state.get("username", "")
         if username:
             user_index = df_users.index[df_users['username'] == username]
@@ -1320,7 +1325,7 @@ else:
         
     aplicar_estilos_authenticated() # Aplica o fundo de gradiente
     renderizar_sidebar()
-    st.markdown("<div class'main-container'>", unsafe_allow_html=True)
+    st.markdown("<div class='main-container'>", unsafe_allow_html=True)
 
     if st.session_state.tela == "home":
         st.title("🏠 Home")
@@ -1389,7 +1394,7 @@ else:
                         if email:
                             if not df_users.loc[idx, "password"]:
                                 token = secrets.token_urlsafe(32)
-                                expires = (datetime.utcnow() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+                                expires = (datetime.now(tz_brasilia) + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
                                 df_users.loc[idx, "reset_token"] = token
                                 df_users.loc[idx, "reset_expires_at"] = expires
                                 reset_link = f"{base_url}?reset_token={token}"
@@ -1422,7 +1427,7 @@ else:
             with col1:
                 if st.button("🔁 Forçar redefinição de senha (enviar link)"):
                     token = secrets.token_urlsafe(32)
-                    expires = (datetime.utcnow() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+                    expires = (datetime.now(tz_brasilia) + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
                     df_users.loc[idx,"reset_token"] = token
                     df_users.loc[idx,"reset_expires_at"] = expires
                     save_user_db(df_users)
@@ -1490,7 +1495,7 @@ else:
                             "matricula": new_matricula.strip(),
                             "email": new_email.strip(),
                             "status": status,
-                            "last_password_change": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") if pwd_hash else "",
+                            "last_password_change": datetime.now(tz_brasilia).strftime("%Y-%m-%d %H:%M:%S") if pwd_hash else "",
                             "force_password_reset": "" if pwd_hash else "1"
                         })
                         
@@ -1508,7 +1513,7 @@ else:
                             if idx_list:
                                 idx2 = idx_list[0]
                                 token = secrets.token_urlsafe(32)
-                                expires = (datetime.utcnow() + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+                                expires = (datetime.now(tz_brasilia) + timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
                                 df_users_reloaded.loc[idx2,"reset_token"] = token
                                 df_users_reloaded.loc[idx2,"reset_expires_at"] = expires
                                 save_user_db(df_users_reloaded)
@@ -1551,9 +1556,9 @@ else:
             mensalidade = st.number_input("Mensalidade (R$)", min_value=0.0, step=0.01, format="%.2f", value=float(mensalidade) if mensalidade else 0.0)
             st.subheader("2) Período e Serviço")
             c1, c2 = st.columns(2)
-            data_entrada = c1.date_input("Data de entrada", datetime.now())
-            data_saida = c2.date_input("Data de saída", datetime.now() + timedelta(days=3))
-            feriados = c1.number_input("Feriados no período", min_value=0, step=1, value=0)
+            data_entrada = c1.date_input("Data de entrada", datetime.now(tz_brasilia).date())
+            data_saida = c2.date_input("Data de saída", datetime.now(tz_brasilia).date() + timedelta(days=3))
+            feriados = c1.number_input("Feriados no período:", min_value=0, step=1, value=0)
             tipo_servico = c2.selectbox("Tipo de serviço (SLA)", [
                 "Preventiva – 2 dias úteis",
                 "Corretiva – 3 dias úteis",
@@ -1697,8 +1702,8 @@ else:
                 with st.form(key=f"form_cenario_{len(st.session_state.cenarios)}", clear_on_submit=True):
                     st.subheader("2. Detalhes do Serviço")
                     subcol1, subcol2 = st.columns(2)
-                    entrada = subcol1.date_input("📅 Data de entrada:", datetime.now())
-                    saida = subcol2.date_input("📅 Data de saída:", datetime.now() + timedelta(days=5))
+                    entrada = subcol1.date_input("📅 Data de entrada:", datetime.now(tz_brasilia).date())
+                    saida = subcol2.date_input("📅 Data de saída:", datetime.now(tz_brasilia).date() + timedelta(days=5))
                     feriados = subcol1.number_input("📌 Feriados no período:", min_value=0, step=1)
                     servico = subcol2.selectbox("🛠️ Tipo de serviço:", ["Preventiva – 2 dias úteis", "Corretiva – 3 dias úteis", "Preventiva + Corretiva – 5 dias úteis", "Motor – 15 dias úteis"])
                     with st.expander("Verificar Peças Adicionadas"):
@@ -1734,8 +1739,7 @@ else:
                     st.markdown("---")
                     st.write("Peças adicionadas:")
                     opcoes_pecas = [f"{p['nome']} - {formatar_moeda(p['valor'])}" for p in st.session_state.pecas_atuais]
-                    # --- 💡 CORREÇÃO DE BUG 💡 ---
-                    pecas_para_remover = st.multiselect("Selecione para remover:", options=opcoes_pecas) # Corrigido de opcoes_locas
+                    pecas_para_remover = st.multiselect("Selecione para remover:", options=opcoes_pecas)
                     if st.button("🗑️ Remover Selecionadas", type="secondary", use_container_width=True):
                         if pecas_para_remover:
                             nomes_para_remover = [item.split(' - ')[0] for item in pecas_para_remover]
@@ -1760,7 +1764,8 @@ else:
                 st.error("Preencha todos os campos.")
             else:
                 novo_id = str(uuid.uuid4())
-                now = datetime.now().strftime("%Y-%m-%d %H:%M")
+                # --- 💡 NOVA ADIÇÃO: Fuso Horário 💡 ---
+                now = datetime.now(tz_brasilia).strftime("%Y-%m-%d %H:%M")
                 
                 novo_ticket = {
                     "id": novo_id,
@@ -1813,14 +1818,32 @@ else:
         if df.empty:
             st.info("Nenhuma análise encontrada.")
         else:
+            # --- 💡 INÍCIO DA NOVA LÓGICA DE FILTRO DE MÊS 💡 ---
+            opcoes_mes = ["Todos"]
+            if not df.empty:
+                df['data_hora_dt'] = pd.to_datetime(df['data_hora'], errors='coerce')
+                df = df.dropna(subset=['data_hora_dt']) # Remove linhas com datas inválidas
+                
+                if not df.empty:
+                    df['mes_ano_filtro'] = df['data_hora_dt'].dt.strftime('%Y-%m')
+                    meses_disponiveis = sorted(df['mes_ano_filtro'].unique(), reverse=True)
+                    opcoes_mes = ["Todos"] + meses_disponiveis
+            # --- FIM DA NOVA LÓGICA ---
+
             usuarios = ["Todos"] + sorted(list(df["username"].unique()))
             usuario_sel = st.selectbox("Filtrar por usuário:", usuarios)
+            
+            mes_sel = st.selectbox("Filtrar por mês:", opcoes_mes) # <-- NOVO FILTRO
+            
+            tipo_sel = st.selectbox("Tipo de análise:", ["Todos", "cenarios", "sla_mensal"])
+            
+            # Aplicar filtros
             if usuario_sel != "Todos":
                 df = df[df["username"] == usuario_sel]
-                
-            tipo_sel = st.selectbox("Tipo de análise:", ["Todos", "cenarios", "sla_mensal"])
             if tipo_sel != "Todos":
                 df = df[df["tipo"] == tipo_sel]
+            if mes_sel != "Todos":
+                df = df[df['mes_ano_filtro'] == mes_sel]
                 
             st.write(f"Total de análises: {len(df)}")
             
@@ -1832,10 +1855,9 @@ else:
                 supabase_public_url = f"{url}/storage/v1/object/public"
                 
                 # 2. Criar o DataFrame "achatado"
-                # (Passamos o 'df' original para a função)
                 df_flat = pd.DataFrame([extrair_linha_relatorio(row, supabase_public_url) for _, row in df.iterrows()])
 
-                # 3. Adiciona coluna Economia (usando o 'df' original)
+                # 3. Adiciona coluna Economia (usando o 'df' original filtrado)
                 df_flat["Economia"] = [calcular_economia(row) for _, row in df.iterrows()]
                 
                 # 4. Reordena as colunas
@@ -1843,7 +1865,9 @@ else:
                     "Cliente", "Placa", "Serviço", "Valor Final", "Economia",
                     "Usuário", "Data/Hora", "PDF"
                 ]
-                df_flat = df_flat[[c for c in colunas if c in df_flat.columns]]
+                # Remove colunas que o df_flat possa não ter (como dados_json, tipo)
+                colunas_finais = [c for c in colunas if c in df_flat.columns]
+                df_flat = df_flat[colunas_finais]
 
                 # 5. Botão de download do Excel
                 excel_bytes = gerar_excel_moderno(df_flat)
@@ -1858,7 +1882,7 @@ else:
                 # 6. Botão de download do CSV "achatado" (com separador ;)
                 st.download_button(
                     "⬇️ Baixar relatório CSV (Excel)",
-                    data=df_flat.to_csv(index=False, sep=";", encoding="utf-8"), # Aplicada a mudança
+                    data=df_flat.to_csv(index=False, sep=";", encoding="utf-8"),
                     file_name="relatorio_analises.csv",
                     mime="text/csv",
                     help="Clique para baixar o relatório em CSV simples (compatível com Excel)."
@@ -1868,13 +1892,14 @@ else:
 
                 # 7. Mostrar os dados na tela com links HTML (e Economia)
                 for idx, row in df_flat.iterrows():
+                    economia_html = f"<b>Economia:</b> {row['Economia']}<br>" if row['Economia'] else ""
                     st.markdown(f"""
                     <div style="border:1px solid #444;padding:10px;border-radius:8px;margin-bottom:8px;">
                         <b>Cliente:</b> {row['Cliente']}<br>
                         <b>Placa:</b> {row['Placa']}<br>
                         <b>Serviço:</b> {row['Serviço']}<br>
                         <b>Valor Final:</b> {row['Valor Final']}<br>
-                        <b>Economia:</b> {row['Economia']}<br>
+                        {economia_html}
                         <b>Usuário:</b> {row['Usuário']}<br>
                         <b>Data/Hora:</b> {row['Data/Hora']}<br>
                         <a href="{row['PDF']}" target="_blank" style="color: #60a5fa; text-decoration: none;">📥 Baixar PDF</a>
@@ -1921,7 +1946,8 @@ else:
                 if responder or ignorar:
                     df.loc[df["id"] == row["id"], "resposta"] = resposta if responder else "Ticket fechado sem resposta."
                     df.loc[df["id"] == row["id"], "status"] = "fechado"
-                    df.loc[df["id"] == row["id"], "data_resposta"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+                    # --- 💡 NOVA ADIÇÃO: Fuso Horário 💡 ---
+                    df.loc[df["id"] == row["id"], "data_resposta"] = datetime.now(tz_brasilia).strftime("%Y-%m-%d %H:%M")
                     save_tickets(df)
                     st.success("Ticket fechado!")
                     safe_rerun()
