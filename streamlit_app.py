@@ -24,7 +24,7 @@ import json
 import uuid  # Corrigido
 import io # Adicionado para o Excel
 import xlsxwriter # Adicionado para o Excel
-import pytz # --- 💡 NOVA ADIÇÃO 💡 ---
+import pytz 
 
 # --- CONSTANTES DE IMAGEM (URLs) ---
 FAVICON_URL = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
@@ -32,7 +32,7 @@ LOGO_URL_LOGIN = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/ass
 LOGO_URL_SIDEBAR = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
 # ------------------------------------
 
-# --- 💡 NOVA ADIÇÃO: Fuso Horário 💡 ---
+# --- Fuso Horário ---
 tz_brasilia = pytz.timezone('America/Sao_Paulo')
 # ------------------------------------
 
@@ -816,7 +816,7 @@ def ir_para_reset(): st.session_state.tela = "reset_password"
 def ir_para_force_change(): st.session_state.tela = "force_change_password"
 def ir_para_relatorio_analises(): st.session_state.tela = "relatorio_analises"
 def ir_para_terms(): st.session_state.tela = "terms_consent"
-def ir_para_dashboard(): st.session_state.tela = "dashboard"
+def ir_para_dashboard(): st.session_state.tela = "dashboard" # --- 💡 NOVA ADIÇÃO 💡 ---
 
 
 def limpar_dados_comparativos():
@@ -856,6 +856,7 @@ def renderizar_sidebar():
         st.button("💬 Abrir Ticket", on_click=lambda: st.session_state.update({"tela": "tickets"}), use_container_width=True)
 
         if user_is_admin():
+            # --- 💡 NOVA ADIÇÃO 💡 ---
             st.button("📊 Dashboard de Análises", on_click=ir_para_dashboard, use_container_width=True)
             st.button("👤 Gerenciar Usuários", on_click=ir_para_admin, use_container_width=True)
             
@@ -1328,7 +1329,7 @@ else:
         df = load_analises()
         
         # Prepara os dados para os gráficos
-        if df.empty or 'data_hora' not in df.columns:
+        if df.empty or 'data_hora' not in df.columns or df['data_hora'].isnull().all():
             st.info("Nenhum dado de análise encontrado para exibir o dashboard.")
         else:
             df['data_hora_dt'] = pd.to_datetime(df['data_hora'], errors='coerce')
@@ -1358,7 +1359,7 @@ else:
                 
                 with col2:
                     meses_map = {
-                        'Janeiro': 1, 'Fevereiro': 2, 'Março': 3, 'Abril': 4, 'Maio': 5, 'Junho': 6, # <-- CORRIGIDO
+                        'Janeiro': 1, 'Fevereiro': 2, 'Março': 3, 'Abril': 4, 'Maio': 5, 'Junho': 6,
                         'Julho': 7, 'Agosto': 8, 'Setembro': 9, 'Outubro': 10, 'Novembro': 11, 'Dezembro': 12
                     }
                     opcoes_mes = ["Todos"] + list(meses_map.keys())
@@ -1918,7 +1919,7 @@ else:
             # --- 💡 INÍCIO DA NOVA LÓGICA DE FILTRO 💡 ---
             opcoes_ano = ["Todos"]
             meses_map = {
-                'Janeiro': 1, 'Fevereiro': 2, 'Março': 3, 'Abril': 4, 'Maio': 5, 'Junho': 6,
+                'Janeiro': 1, 'Fevereiro': 2, 'Março': 3, 'Abril': 4, 'Maio': 5, 'Junho': 6, # <-- CORRIGIDO
                 'Julho': 7, 'Agosto': 8, 'Setembro': 9, 'Outubro': 10, 'Novembro': 11, 'Dezembro': 12
             }
             opcoes_mes = ["Todos"] + list(meses_map.keys())
