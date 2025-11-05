@@ -25,6 +25,7 @@ import uuid
 import io 
 import xlsxwriter 
 import pytz 
+import google.generativeai as genai # --- 💡 NOVA ADIÇÃO: I.A. 💡 ---
 
 # --- CONSTANTES DE IMAGEM (URLs) ---
 FAVICON_URL = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
@@ -70,6 +71,19 @@ if not url or not key:
 
 supabase: Client = create_client(url, key)
 # ---------------------------------
+
+# --- 💡 NOVA ADIÇÃO: INICIALIZAÇÃO DO GEMINI AI 💡 ---
+try:
+    GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY")
+    if not GOOGLE_API_KEY:
+        st.error("Chave da API do Google (GOOGLE_API_KEY) não encontrada. Verifique seus Secrets.")
+        # Não paramos o app, mas a IA não vai funcionar
+    else:
+        genai.configure(api_key=GOOGLE_API_KEY)
+except Exception as e:
+    st.error(f"Erro ao configurar a API do Google: {e}")
+# ---------------------------------
+
 
 # --- Conversor de JSON para Numpy/Pandas ---
 def converter_json(obj):
@@ -2000,7 +2014,7 @@ else:
                 
                 st.markdown("---") # Divisor
 
-                # 7. --- 💡 INÍCIO DA CORREÇÃO DO HTML 💡 ---
+                # 7. --- 💡 INÍCIO DA CORREÇÃO DO HTML (ATUALIZADA) 💡 ---
                 for idx, row in df_flat.iterrows():
                     economia_html = f"<b>Economia:</b> {row['Economia']}<br>" if row.get('Economia') else ""
 
@@ -2027,7 +2041,7 @@ else:
                     html_string += "</div>"
 
                     st.markdown(html_string, unsafe_allow_html=True)
-                # --- 💡 FIM DA CORREÇÃO DO HTML 💡 ---
+                # --- 💡 FIM DA CORREÇÃO DO HTML (ATUALIZADA) 💡 ---
                 
             else:
                 st.info("Nenhuma análise encontrada para o filtro selecionado.")
