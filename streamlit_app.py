@@ -2127,7 +2127,7 @@ else:
         # Inicializa o modelo de I.A.
         try:
             if "ia_chat" not in st.session_state:
-                model = genai.GenerativeModel('gemini-pro')
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 # Adiciona um "contexto" para a I.A. saber como se comportar
                 contexto_sistema = (
                     "Você é um assistente virtual chamado 'Frotas IA', especializado no aplicativo 'Frotas Vamos SLA'. "
