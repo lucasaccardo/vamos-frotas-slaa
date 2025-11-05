@@ -25,7 +25,7 @@ import uuid
 import io 
 import xlsxwriter 
 import pytz 
-import google.generativeai as genai # --- 💡 NOVA ADIÇÃO: I.A. 💡 ---
+import google.generativeai as genai 
 
 # --- CONSTANTES DE IMAGEM (URLs) ---
 FAVICON_URL = "https://github.com/lucasaccardo/vamos-frotas-sla/blob/main/assets/logo.png?raw=true"
@@ -72,11 +72,10 @@ if not url or not key:
 supabase: Client = create_client(url, key)
 # ---------------------------------
 
-# --- 💡 NOVA ADIÇÃO: INICIALIZAÇÃO DO GEMINI AI 💡 ---
+# --- INICIALIZAÇÃO DO GEMINI AI ---
 try:
     GOOGLE_API_KEY = st.secrets.get("GOOGLE_API_KEY")
     if not GOOGLE_API_KEY:
-        # Não mostre o erro para todos, apenas no log (ou para o admin)
         if st.session_state.get("role") in ("admin", "superadmin"):
             st.error("Chave da API do Google (GOOGLE_API_KEY) não encontrada. O Assistente de I.A. não funcionará.")
     else:
@@ -84,6 +83,39 @@ try:
 except Exception as e:
     if st.session_state.get("role") in ("admin", "superadmin"):
         st.error(f"Erro ao configurar a API do Google: {e}")
+# ---------------------------------
+
+# --- 💡 NOVA ADIÇÃO: Helper da I.A. 💡 ---
+def get_gemini_model():
+    """
+    Inicializa um modelo Gemini com persona natural em pt-BR, usando alias -latest
+    e fallback automático. Ajuste de criatividade pode ser feito depois via
+    model.generation_config.temperature.
+    """
+    candidates = [
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash-001",
+        "gemini-1.5-pro-latest",
+    ]
+    system_ptbr = (
+        "Você é o Assistente I.A. do app Frotas Vamos SLA. "
+        "Fale em português do Brasil, de forma natural, humana e objetiva. "
+        "Evite jargões desnecessários, ofereça opções quando fizer sentido, "
+        "faça perguntas de esclarecimento se faltar contexto e mantenha um tom cordial. "
+        "Responda de forma clara e prática, sem parecer robótico."
+    )
+    last_err = None
+    for m in candidates:
+        try:
+            return genai.GenerativeModel(
+                m,
+                system_instruction=system_ptbr,
+                generation_config={"temperature": 0.8, "top_p": 0.95, "top_k": 40},
+            )
+        except Exception as e:
+            last_err = e
+            continue
+    raise RuntimeError(f"Não foi possível inicializar um modelo Gemini compatível. Último erro: {last_err}")
 # ---------------------------------
 
 
@@ -2110,70 +2142,113 @@ else:
         else:
             st.warning("Nenhum ticket fechado encontrado.")
         
-    # --- 💡 NOVA PÁGINA: ASSISTENTE I.A. 💡 ---
+    # --- 💡 NOVA PÁGINA: ASSISTENTE I.A. (ATUALIZADA) 💡 ---
     elif st.session_state.tela == "assistente_ia":
         st.title("🤖 Assistente I.A.")
-        st.write("Faça perguntas sobre o cálculo de SLA, prazos ou sobre o funcionamento do aplicativo.")
+        st.caption("Converse de maneira natural. Respondo em pt-BR.")
 
         # Verifica se a API Key foi carregada
         if not GOOGLE_API_KEY:
             st.error("A funcionalidade de I.A. está desabilitada. O administrador precisa configurar a `GOOGLE_API_KEY` nos Secrets do Streamlit.")
             st.stop()
-
-        # Inicializa o histórico do chat
-        if "ia_messages" not in st.session_state:
-            st.session_state.ia_messages = []
         
-        # Inicializa o modelo de I.A.
-        try:
-            if "ia_chat" not in st.session_state:
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                # Adiciona um "contexto" para a I.A. saber como se comportar
-                contexto_sistema = (
-                    "Você é um assistente virtual chamado 'Frotas IA', especializado no aplicativo 'Frotas Vamos SLA'. "
-                    "Sua função é ajudar os usuários a entender como o aplicativo funciona e tirar dúvidas sobre os cálculos de SLA. "
-                    "Seja amigável e direto ao ponto. Os prazos de SLA são: "
-                    "Preventiva: 2 dias úteis. "
-                    "Corretiva: 3 dias úteis. "
-                    "Preventiva + Corretiva: 5 dias úteis. "
-                    "Motor: 15 dias úteis. "
-                    "O cálculo do desconto é: (Valor da Mensalidade / 30) * (Dias Úteis Totais - Dias de SLA). "
-                    "Responda apenas a perguntas relacionadas a este contexto de SLA, frota e uso do aplicativo."
-                )
-                st.session_state.ia_chat = model.start_chat(history=[
-                    {'role': 'user', 'parts': [contexto_sistema]},
-                    {'role': 'model', 'parts': ["Olá! Eu sou o Frotas IA. Como posso ajudar você a entender nossos cálculos de SLA ou o funcionamento do aplicativo?"]}
-                ])
-            
-            # Mostra o histórico do chat
-            for message in st.session_state.ia_chat.history:
-                if message.role == "user" and "Você é um assistente virtual" in message.parts[0].text:
-                    continue # Pula a instrução do sistema
-                role_emoji = "🧑‍💻" if message.role == "user" else "🤖"
-                with st.chat_message(message.role, avatar=role_emoji):
-                    st.markdown(message.parts[0].text)
-
-            # Input do usuário
-            if prompt := st.chat_input("Qual sua dúvida sobre o SLA?"):
-                # Adiciona a mensagem do usuário na tela
-                with st.chat_message("user", avatar="🧑‍💻"):
-                    st.markdown(prompt)
-                
-                # Envia para a I.A. e mostra a resposta
+        # Diagnóstico rápido dos modelos + controles de estilo
+        c1, c2, c3 = st.columns([1, 1, 1.2])
+        with c1:
+            if st.button("🔎 Listar modelos suportados"):
                 try:
-                    with st.spinner("Pensando..."):
-                        response = st.session_state.ia_chat.send_message(prompt)
-                    with st.chat_message("model", avatar="🤖"):
-                        st.markdown(response.text)
+                    modelos = [
+                        md.name
+                        for md in genai.list_models()
+                        if "generateContent" in getattr(md, "supported_generation_methods", [])
+                    ]
+                    st.write(modelos)
                 except Exception as e:
-                    st.error(f"Desculpe, tive um problema ao processar sua pergunta: {e}")
+                    st.warning(f"Falhou ao listar modelos: {e}")
+        with c2:
+            temp = st.slider("Criatividade", 0.0, 1.0, 0.80, 0.05, help="0 = mais objetiva; 1 = mais criativa")
+        with c3:
+            tom = st.selectbox(
+                "Tom da resposta",
+                ["Natural", "Objetivo", "Amigável", "Técnico"],
+                index=0,
+                help="Ajusta levemente o estilo do texto."
+            )
+
+        # Limpar conversa
+        cc1, cc2 = st.columns([1, 6])
+        with cc1:
+            if st.button("🧹 Limpar conversa", type="secondary"):
+                for k in ["ia_chat", "ia_history", "ia_model"]:
+                    if k in st.session_state:
+                        del st.session_state[k]
+                st.success("Conversa reiniciada.")
+                safe_rerun() # Adicionado para recarregar a tela limpa
+
+        # Sessão do chat (memória da conversa)
+        try:
+            if "ia_model" not in st.session_state:
+                st.session_state.ia_model = get_gemini_model()
+            if "ia_chat" not in st.session_state:
+                # histórico explícito para controle de renderização
+                st.session_state.ia_history = [] 
+                # sessão de chat do SDK (também mantém histórico internamente)
+                st.session_state.ia_chat = st.session_state.ia_model.start_chat(history=[])
+
+            # Renderizar histórico
+            for msg in st.session_state.ia_history:
+                role = "user" if msg.get("role") == "user" else "assistant"
+                with st.chat_message(role):
+                    st.markdown(msg["parts"][0]["text"])
+
+            # Entrada do usuário (mais natural)
+            user_text = st.chat_input("Escreva sua mensagem…")
+            if user_text:
+                # Prefixo leve de tom
+                prefixos = {
+                    "Natural": "",
+                    "Objetivo": "Seja direto e objetivo, sem perder a cordialidade.",
+                    "Amigável": "Use um tom cordial e acolhedor, mantendo objetividade.",
+                    "Técnico": "Explique com precisão técnica, em linguagem acessível."
+                }
+                pref = prefixos.get(tom, "")
+                prompt_final = f"{pref}\n\n{user_text}".strip()
+
+                # Registrar a fala do usuário
+                st.session_state.ia_history.append({"role": "user", "parts": [{"text": user_text}]})
+                with st.chat_message("user"):
+                    st.markdown(user_text)
+
+                # Resposta em streaming (sensação menos robótica)
+                with st.chat_message("assistant"):
+                    placeholder = st.empty()
+                    full = ""
+                    try:
+                        # Ajuste dinâmico de criatividade
+                        st.session_state.ia_model.generation_config.temperature = float(temp)
+                    except Exception:
+                        pass
+                    try:
+                        stream = st.session_state.ia_chat.send_message(prompt_final, stream=True)
+                        for chunk in stream:
+                            delta = chunk.text or ""
+                            if not delta:
+                                continue
+                            full += delta
+                            placeholder.markdown(full + " ▌") # Adiciona um cursor piscando
+                        placeholder.markdown(full) # Remove o cursor no final
+                    except Exception as e:
+                        full = f"Desculpe, tive um problema ao gerar a resposta: {e}"
+                        placeholder.markdown(full)
+
+                # Guardar resposta no histórico visível
+                st.session_state.ia_history.append({"role": "model", "parts": [{"text": full}]})
 
         except Exception as e:
             st.error(f"Não foi possível iniciar o assistente de I.A. Verifique se a API Key do Google está correta e habilitada. Erro: {e}")
-            if "ia_chat" in st.session_state:
-                del st.session_state.ia_chat # Força a reinicialização na próxima vez
-
-
+            if "ia_chat" in st.session_state: del st.session_state.ia_chat
+            if "ia_model" in st.session_state: del st.session_state.ia_model
+    
     # --- FIM DA NOVA PÁGINA ---
         
     else:
