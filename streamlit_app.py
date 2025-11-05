@@ -21,9 +21,9 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.pdfgen import canvas
 from streamlit.components.v1 import html as components_html
 import json
-import uuid  # Corrigido
-import io # Adicionado para o Excel
-import xlsxwriter # Adicionado para o Excel
+import uuid
+import io 
+import xlsxwriter 
 import pytz 
 
 # --- CONSTANTES DE IMAGEM (URLs) ---
@@ -2002,22 +2002,30 @@ else:
 
                 # 7. --- 💡 INÍCIO DA CORREÇÃO DO HTML 💡 ---
                 for idx, row in df_flat.iterrows():
-                    economia_html = f"<b>Economia:</b> {row['Economia']}<br>" if row['Economia'] else ""
-                    
-                    # Monta a string HTML primeiro
-                    html_string = f"""
+                    economia_html = f"<b>Economia:</b> {row['Economia']}<br>" if row.get('Economia') else ""
+
+                    # Remove a indentação que fazia o Markdown interpretar como bloco de código
+                    html_string = dedent(f"""
                     <div style="border:1px solid #444;padding:10px;border-radius:8px;margin-bottom:8px;">
-                        <b>Cliente:</b> {row['Cliente']}<br>
-                        <b>Placa:</b> {row['Placa']}<br>
-                        <b>Serviço:</b> {row['Serviço']}<br>
-                        <b>Valor Final:</b> {row['Valor Final']}<br>
-                        {economia_html}
-                        <b>Usuário:</b> {row['Usuário']}<br>
-                        <b>Data/Hora:</b> {row['Data/Hora']}<br>
-                        <a href="{row['PDF']}" target="_blank" style="color: #60a5fa; text-decoration: none;">📥 Baixar PDF</a>
-                    </div>
-                    """
-                    # Passa a string pronta para o markdown
+                    <b>Cliente:</b> {row['Cliente']}<br>
+                    <b>Placa:</b> {row['Placa']}<br>
+                    <b>Serviço:</b> {row['Serviço']}<br>
+                    <b>Valor Final:</b> {row['Valor Final']}<br>
+                    {economia_html}
+                    <b>Usuário:</b> {row['Usuário']}<br>
+                    <b>Data/Hora:</b> {row['Data/Hora']}<br>
+                    """).strip() # .strip() remove espaços em branco antes/depois
+
+                    # Só exibe o link se existir URL
+                    pdf_link = row.get("PDF", "")
+                    if pdf_link and "http" in pdf_link: # Verifica se o link é válido
+                        html_string += (
+                            f'<a href="{pdf_link}" target="_blank" rel="noopener noreferrer" '
+                            f'style="color: #60a5fa; text-decoration: none;">📥 Baixar PDF</a>'
+                        )
+
+                    html_string += "</div>"
+
                     st.markdown(html_string, unsafe_allow_html=True)
                 # --- 💡 FIM DA CORREÇÃO DO HTML 💡 ---
                 
