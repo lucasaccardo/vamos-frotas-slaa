@@ -1140,7 +1140,7 @@ def user_is_admin():
 def user_is_superadmin():
     return st.session_state.get("username") == SUPERADMIN_USERNAME or st.session_state.get("role") == "superadmin"
 
-# --- renderizar_sidebar (ATUALIZADO) ---
+# --- renderizar_sidebar (ATUALIZADO COM ORDEM PROFISSIONAL) ---
 def renderizar_sidebar():
     with st.sidebar:
         st.markdown("<div style='text-align:center;padding-top:8px'>", unsafe_allow_html=True)
@@ -1152,23 +1152,30 @@ def renderizar_sidebar():
 
         st.header("Menu de Navegação")
         
+        # --- 1. AÇÕES PRINCIPAIS (TODOS) ---
         st.button("🏠 Voltar para Home", on_click=ir_para_home, use_container_width=True)
         
         if st.session_state.tela in ("calc_comparativa", "calc_simples"):
             st.button("🔄 Limpar Cálculo", on_click=limpar_dados_comparativos, use_container_width=True)
         
+        st.markdown("---") # Separador
+
+        # --- 2. FERRAMENTAS DO USUÁRIO (TODOS) ---
         st.button("📑 Meu Histórico", on_click=ir_para_historico_pessoal, use_container_width=True)
         st.button("🤖 Assistente I.A.", on_click=ir_para_assistente_ia, use_container_width=True)
         st.button("💬 Abrir Ticket", on_click=lambda: st.session_state.update({"tela": "tickets"}), use_container_width=True)
 
+        # --- 3. PAINEL DE ADMIN ---
         if user_is_admin():
+            st.markdown("---") # Separador
+            st.subheader("Admin")
             st.button("📊 Dashboard de Análises", on_click=ir_para_dashboard, use_container_width=True)
+            st.button("📈 Relatório de Análises", on_click=ir_para_relatorio_analises, use_container_width=True)
             st.button("👤 Gerenciar Usuários", on_click=ir_para_admin, use_container_width=True)
             
-        if user_is_admin() or user_is_superadmin():
-            st.button("📈 Relatório de Análises", on_click=ir_para_relatorio_analises, use_container_width=True)
-            
+        # --- 4. PAINEL SUPERADMIN ---
         if user_is_superadmin():
+            st.subheader("Super Admin") # Superadmin vê o seu próprio separador
             st.button("📋 Gerenciar Tickets", on_click=lambda: st.session_state.update({"tela": "admin_tickets"}), use_container_width=True)
             
             # Carrega solicitações pendentes para mostrar notificação no botão
@@ -1184,6 +1191,8 @@ def renderizar_sidebar():
                 
             st.button(btn_label, on_click=ir_para_admin_delete_requests, use_container_width=True)
 
+        # --- 5. SAIR (SEMPRE POR ÚLTIMO) ---
+        st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True) # Espaço antes de sair
         st.button("🚪 Sair (Logout)", on_click=logout, type="secondary", use_container_width=True)
 # --- FIM DA ATUALIZAÇÃO ---
 # =========================
