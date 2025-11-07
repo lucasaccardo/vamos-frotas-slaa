@@ -297,7 +297,7 @@ def extrair_linha_relatorio(row, supabase_url=None):
             pdf_link = "#" 
 
     return {
-        "Protocolo": row["id"], # <<< FEATURE 1: Protocolo
+        "Protocolo": row["id"], 
         "Cliente": cliente,
         "Placa": placa,
         "Serviço": servico,
@@ -348,8 +348,6 @@ def gerar_excel_moderno(df_flat):
     normal_format = workbook.add_format({'border': 1})
     link_format = workbook.add_format({'font_color': 'blue', 'underline': 1, 'border': 1})
 
-    # <<< FEATURE 1: Protocolo
-    # Esconde colunas internas e define a ordem
     headers_ordenados = [
         "Protocolo", "Cliente", "Placa", "Serviço", "Valor Final", "Economia",
         "Usuário", "Data/Hora", "PDF"
@@ -362,7 +360,7 @@ def gerar_excel_moderno(df_flat):
         worksheet.write(0, col, header, header_format)
         worksheet.set_column(col, col, 22) 
         if header == "Protocolo":
-             worksheet.set_column(col, col, 38) # Coluna do ID/Protocolo mais larga
+             worksheet.set_column(col, col, 38)
         if header == "PDF":
              worksheet.set_column(col, col, 12) 
 
@@ -385,6 +383,33 @@ def gerar_excel_moderno(df_flat):
     output.seek(0)
     return output
 
+# --- NOVA FUNÇÃO: RENDER_METRIC_BAR ---
+def render_metric_bar(label, value, percentage):
+    """Gera o HTML/CSS para uma barra de métrica customizada."""
+    
+    # Define os gradientes aqui
+    color_style = "background: linear-gradient(90deg, #93c5fd, #3b82f6);" # Azul (Análises)
+    if "Economia" in label:
+        color_style = "background: linear-gradient(90deg, #5eead4, #10b981);" # Verde (Economia)
+    
+    # Formata o valor
+    value_str = f"R$ {value:,.0f}" if "Economia" in label else f"{int(value)}"
+    
+    # Garante que a porcentagem não passe de 100 ou seja menor que 0
+    percentage = max(0, min(percentage, 100))
+    
+    return f"""
+    <div class="metric-bar-container">
+        <div class="metric-bar-label">{label}</div>
+        <div class="metric-bar-wrapper">
+            <div class="metric-bar-fill" style="{color_style} width: {percentage}%;">
+                <span>{value_str}</span>
+            </div>
+        </div>
+    </div>
+    """
+# --- FIM DA NOVA FUNÇÃO ---
+
 
 # --- Definição das colunas ---
 ANALISES_COLS = ["id", "username", "tipo", "data_hora", "dados_json", "pdf_path"]
@@ -394,14 +419,10 @@ REQUIRED_USER_COLUMNS = [
     "last_password_change", "force_password_reset"
 ]
 TICKET_COLUMNS = ["id", "username", "full_name", "email", "assunto", "descricao", "status", "resposta", "data_criacao", "data_resposta", "anexo_path"]
-
-# <<< FEATURE 3: Colunas da nova tabela
 DELETION_REQUESTS_COLS = [
     "id", "created_at", "analise_id", "pdf_path", "requested_by", 
     "status", "reviewed_by", "reviewed_at", "review_notes"
 ]
-# --- FIM ---
-
 SUPERADMIN_USERNAME = st.secrets.get("SUPERADMIN_USERNAME", "lucas.sureira")
 
 # =========================
@@ -456,7 +477,6 @@ def save_analises(df):
     except Exception as e:
         st.error(f"Erro ao salvar análises no Supabase: {e}")
 
-# <<< FEATURE 1: Protocolo - Função modificada para retornar o ID
 def registrar_analise(username, tipo, dados, pdf_bytes) -> str:
     """Registra a análise e o PDF, e retorna o ID (protocolo)."""
     novo_id = str(uuid.uuid4())
@@ -495,29 +515,25 @@ def registrar_analise(username, tipo, dados, pdf_bytes) -> str:
     except Exception as e:
         st.error(f"Erro ao registrar análise no Supabase: {e}")
         return ""
-# --- FIM DA MODIFICAÇÃO ---
 
 def delete_analise(analise_id: str, pdf_path: str):
     """Deleta permanentemente uma análise e seu PDF."""
     try:
-        # 1. Deletar o registro do banco de dados
         supabase.table('analises').delete().eq('id', analise_id).execute()
         
-        # 2. Deletar o arquivo do Storage (se existir)
         if pdf_path and pdf_path.strip():
             try:
                 supabase.storage.from_("pdfs").remove([pdf_path])
             except Exception as e:
-                # Não é um erro fatal se o PDF não for encontrado
                 st.warning(f"Erro ao deletar PDF do storage (pode já ter sido removido): {e}")
         
-        st.cache_data.clear() # Limpa o cache para atualizar a lista
+        st.cache_data.clear()
         
     except Exception as e:
         st.error(f"Erro ao deletar análise: {e}")
-        raise e # Levanta o erro para a função que o chamou
+        raise e 
 
-# --- FEATURE 3: Funções de Solicitação de Exclusão ---
+# --- Funções de Solicitação de Exclusão ---
 @st.cache_data(ttl=60)
 def load_delete_requests():
     """Carrega todas as solicitações de exclusão."""
@@ -574,7 +590,6 @@ def dismiss_delete_request(request_id: str):
         safe_rerun()
     except Exception as e:
         st.error(f"Erro ao dispensar notificação: {e}")
-# --- FIM FEATURE 3 ---
 
 # --- Tickets ---
 @st.cache_data(ttl=60)
@@ -676,288 +691,6 @@ def save_user_db(df_users: pd.DataFrame):
         st.error(f"Erro ao salvar usuários no Supabase: {e}")
 
 # =========================
-# Background helpers (Login)
-# =========================
-def show_logo_url(url: str, width: int = 140):
-    st.image(url, width=width)
-    st.markdown("""
-        <style>
-        button[title="Expandir imagem"], button[title="Expand image"], button[aria-label="Expandir imagem"], button[aria-label="Expand image"] {
-            display: none !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-# =========================
-# Utilities & Password
-# =========================
-def get_query_params():
-    try:
-        return dict(st.query_params)
-    except Exception:
-        try:
-            params = st.experimental_get_query_params()
-            return {k: (v[0] if isinstance(v, list) else v) for k, v in params.items()}
-        except Exception:
-            return {}
-
-def safe_rerun():
-    try:
-        st.experimental_rerun()
-    except AttributeError:
-        try:
-            st.rerun()
-        except Exception:
-            pass
-    except Exception:
-        pass
-
-def clear_all_query_params():
-    try:
-        st.query_params.clear()
-    except AttributeError:
-        try:
-            st.experimental_set_query_params()
-        except Exception:
-            pass
-    except Exception:
-        pass
-
-def get_app_base_url():
-    try:
-        url = (st.secrets.get("APP_BASE_URL", "") or "").strip()
-    except Exception:
-        url = ""
-    if url.endswith("/"):
-        url = url[:-1]
-    return url
-
-def is_bcrypt_hash(s: str) -> bool:
-    return isinstance(s, str) and s.startswith("$2")
-
-def verify_password(stored_hash: str, provided_password: str) -> Tuple[bool, bool]:
-    if is_bcrypt_hash(stored_hash):
-        try:
-            ok = pwd_context.verify(provided_password, stored_hash)
-            return ok, (ok and pwd_context.needs_update(stored_hash))
-        except Exception:
-            return False, False
-    legacy = hashlib.sha256(provided_password.encode()).hexdigest()
-    ok = (stored_hash == legacy)
-    return ok, bool(ok)
-
-# =========================
-# Tema Autenticado
-# =========================
-def aplicar_estilos_authenticated():
-    css = """
-    <style id="app-auth-style">
-    /* Esta função SÓ vai sobrescrever o fundo para as telas logadas,
-       anulando o fundo de login do estilo.css */
-    .stApp {
-         background-image: none !important;
-         background: radial-gradient(circle at 10% 10%, rgba(15,23,42,0.96) 0%, rgba(11,17,24,1) 50%) !important;
-    }
-    
-    /* Garante que o CSS de esconder o menu seja aplicado */
-    header[data-testid="stHeader"], #MainMenu, footer {
-         display: none !important;
-    }
-    </style>
-    """
-    try:
-        st.markdown(css, unsafe_allow_html=True)
-    except Exception:
-        pass
-
-# =========================
-# Política de Senha
-# =========================
-PASSWORD_MIN_LEN = 10
-SPECIAL_CHARS = r"!@#$%^&*()_+\-=\[\]{};':\",.<>/?\\|`~"
-
-def validate_password_policy(password: str, username: str = "", email: str = ""):
-    errors = []
-    if len(password) < PASSWORD_MIN_LEN:
-        errors.append(f"Senha deve ter pelo menos {PASSWORD_MIN_LEN} caracteres.")
-    if not re.search(r"[A-Z]", password):
-        errors.append("Senha deve conter pelo menos 1 letra maiúscula.")
-    if not re.search(r"[a-z]", password):
-        errors.append("Senha deve conter pelo menos 1 letra minúscula.")
-    if not re.search(r"[0-9]", password):
-        errors.append("Senha deve conter pelo menos 1 número.")
-    if not re.search(rf"[{re.escape(SPECIAL_CHARS)}]", password):
-        errors.append("Senha deve conter pelo menos 1 caractere especial.")
-    uname = (username or "").strip().lower()
-    local_email = (email or "").split("@")[0].strip().lower()
-    if uname and uname in password.lower():
-        errors.append("Senha não pode conter o seu usuário.")
-    if local_email and local_email in password.lower():
-        errors.append("Senha não pode conter a parte local do seu e-mail.")
-    return (len(errors) == 0), errors
-
-# =========================
-# Helpers de E-mail
-# =========================
-def smtp_available():
-    host = st.secrets.get("EMAIL_HOST", "")
-    user = st.secrets.get("EMAIL_USERNAME", "")
-    password = st.secrets.get("EMAIL_PASSWORD", "")
-    return bool(host and user and password)
-
-def build_email_html(title: str, subtitle: str, body_lines: List[str], cta_label: str = "", cta_url: str = "", footer: str = "") -> str:
-    primary = "#2563EB"
-    brand = "#0d1117"
-    text = "#0b1f2a"
-    light = "#f6f8fa"
-    button_html = ""
-    if cta_label and cta_url:
-        button_html = f"""
-        <tr>
-            <td align="center" style="padding: 28px 0 10px 0;">
-                <a href="{cta_url}" style="background:{primary};color:#ffffff;text-decoration:none;font-weight:600;padding:12px 22px;border-radius:8px;display:inline-block;font-family:Segoe UI,Arial,sans-serif">
-                    {cta_label}
-                </a>
-            </td>
-        </tr>
-        """
-    body_html = "".join([f'<p style="margin:8px 0 8px 0">{line}</p>' for line in body_lines])
-    footer_html = f'<p style="color:#6b7280;font-size:12px">{footer}</p>' if footer else ""
-    return f"""<!DOCTYPE html>
-<html>
-    <body style="margin:0;padding:0;background:{light}">
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="background:{light};padding:24px 0">
-            <tr>
-                <td>
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="600" style="margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb">
-                        <tr>
-                            <td style="background:{brand};padding:18px 24px;color:#ffffff;">
-                                <div style="display:flex;align-items:center;gap:12px">
-                                    <span style="font-weight:700;font-size:18px;font-family:Segoe UI,Arial,sans-serif">Frotas Vamos SLA</span>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td style="padding:24px 24px 0 24px;color:{text};font-family:Segoe UI,Arial,sans-serif">
-                                <h2 style="margin:0 0 6px 0;font-weight:700">{title}</h2>
-                                <p style="margin:0 0 12px 0;color:#475569">{subtitle}</p>
-                                {body_html}
-                            </td>
-                        </tr>
-                        {button_html}
-                        <tr>
-                            <td style="padding:12px 24px 24px 24px;color:#334155;font-family:Segoe UI,Arial,sans-serif">
-                                {footer_html}
-                            </td>
-                        </tr>
-                    </table>
-                    <div style="text-align:center;color:#94a3b8;font-size:12px;margin-top:8px;font-family:Segoe UI,Arial,sans-serif">
-                        © {datetime.now().year} Vamos Locação. Todos os direitos reservados.
-                    </div>
-                </td>
-            </tr>
-        </table>
-    </body>
-</html>"""
-
-def send_email(dest_email: str, subject: str, body_plain: str, body_html: Optional[str] = None) -> bool:
-    host = st.secrets.get("EMAIL_HOST", "")
-    port = int(st.secrets.get("EMAIL_PORT", 587) or 587)
-    user = st.secrets.get("EMAIL_USERNAME", "")
-    password = st.secrets.get("EMAIL_PASSWORD", "")
-    use_tls = str(st.secrets.get("EMAIL_USE_TLS", "True")).lower() in ("1", "true", "yes")
-    sender = st.secrets.get("EMAIL_FROM", user or "no-reply@example.com")
-    if not host or not user or not password:
-        st.warning("Configurações de e-mail não definidas em st.secrets. Exibindo conteúdo (teste).")
-        st.code(f"Simulated email to: {dest_email}\nSubject: {subject}\n\n{body_plain}", language="text")
-        return False
-    try:
-        msg = EmailMessage()
-        msg["Subject"] = subject
-        msg["From"] = sender
-        msg["To"] = dest_email
-        msg.set_content(body_plain)
-        if body_html:
-            msg.add_alternative(body_html, subtype="html")
-        server = smtplib.SMTP(host, port, timeout=20)
-        server.ehlo()
-        if use_tls:
-            server.starttls()
-            server.ehlo()
-        if user and password:
-            server.login(user, password)
-        server.send_message(msg)
-        server.quit()
-        return True
-    except Exception as e:
-        try:
-            st.error(f"Falha ao enviar e-mail: {e}")
-        except Exception:
-            print("Falha ao enviar e-mail:", e)
-        st.code(f"Para: {dest_email}\nAssunto: {subject}\n\n{body_plain}", language="text")
-        return False
-
-def send_reset_email(dest_email: str, reset_link: str) -> bool:
-    subject = "Redefinição de senha - Frotas Vamos SLA"
-    plain = f"""Olá,
-
-Recebemos uma solicitação para redefinir sua senha no Frotas Vamos SLA.
-Use o link abaixo (válido por 30 minutos):
-
-{reset_link}
-
-Se você não solicitou, ignore este e-mail.
-"""
-    html = build_email_html(
-        title="Redefinição de senha",
-        subtitle="Você solicitou redefinir sua senha no Frotas Vamos SLA.",
-        body_lines=["Este link é válido por 30 minutos.", "Se você não solicitou, ignore este e-mail."],
-        cta_label="Redefinir senha",
-        cta_url=reset_link,
-        footer="Este é um e-mail automático. Não responda."
-    )
-    return send_email(dest_email, subject, plain, html)
-
-def send_approved_email(dest_email: str, base_url: str) -> bool:
-    subject = "Conta aprovada - Frotas Vamos SLA"
-    plain = f"""Olá,
-
-Sua conta no Frotas Vamos SLA foi aprovada.
-Acesse a plataforma: {base_url}
-
-Bom trabalho!
-"""
-    html = build_email_html(
-        title="Conta aprovada",
-        subtitle="Seu acesso ao Frotas Vamos SLA foi liberado.",
-        body_lines=["Você já pode acessar a plataforma com seu usuário e senha."],
-        cta_label="Acessar plataforma",
-        cta_url=base_url,
-        footer="Em caso de dúvidas, procure o administrador do sistema."
-    )
-    return send_email(dest_email, subject, plain, html)
-
-def send_invite_to_set_password(dest_email: str, reset_link: str) -> bool:
-    subject = "Sua conta foi aprovada - Defina sua senha"
-    plain = f"""Olá,
-
-Sua conta no Frotas Vamos SLA foi aprovada.
-Para definir sua senha inicial, use o link (válido por 30 minutos):
-{reset_link}
-
-Bom trabalho!
-"""
-    html = build_email_html(
-        title="Defina sua senha",
-        subtitle="Sua conta foi aprovada no Frotas Vamos SLA. Defina sua senha para começar a usar.",
-        body_lines=["O link é válido por 30 minutos."],
-        cta_label="Definir senha",
-        cta_url=reset_link,
-        footer="Se você não reconhece esta solicitação, ignore este e-mail."
-    )
-    return send_email(dest_email, subject, plain, html)
-
-# =========================
 # Lógica de Senha
 # =========================
 def is_password_expired(row) -> bool:
@@ -1030,7 +763,7 @@ def gerar_pdf_comparativo(df_cenarios, melhor_cenario, protocolo_id):
     elementos, styles = [], getSampleStyleSheet()
     styles['Normal'].leading = 14
     
-    elementos.append(Paragraph(f"Protocolo: {protocolo_id}", styles['Normal'])) # <<< FEATURE 1: Protocolo
+    elementos.append(Paragraph(f"Protocolo: {protocolo_id}", styles['Normal']))
     elementos.append(Paragraph("🚛 Relatório Comparativo de Cenários SLA", styles['Title']))
     elementos.append(Spacer(1, 24))
     
@@ -1078,7 +811,7 @@ def gerar_pdf_sla_simples(cliente, placa, tipo_servico, dias_uteis_manut, prazo_
     largura, altura = letter
     
     c.setFont("Helvetica", 10)
-    c.drawString(50, altura - 35, f"Protocolo: {protocolo_id}") # <<< FEATURE 1: Protocolo
+    c.drawString(50, altura - 35, f"Protocolo: {protocolo_id}")
     
     c.setFont("Helvetica-Bold", 14)
     c.drawString(50, altura - 50, "Resultado SLA - Vamos Locação")
@@ -1115,10 +848,8 @@ def ir_para_terms(): st.session_state.tela = "terms_consent"
 def ir_para_dashboard(): st.session_state.tela = "dashboard"
 def ir_para_assistente_ia(): st.session_state.tela = "assistente_ia" 
 
-# <<< FEATURE 2 & 3: Novas funções de navegação
 def ir_para_historico_pessoal(): st.session_state.tela = "historico_pessoal"
 def ir_para_admin_delete_requests(): st.session_state.tela = "admin_delete_requests"
-# --- FIM ---
 
 def limpar_dados_comparativos():
     for key in ["cenarios", "pecas_atuais", "mostrar_comparativo"]:
@@ -1154,9 +885,7 @@ def renderizar_sidebar():
         if st.session_state.tela in ("calc_comparativa", "calc_simples"):
             st.button("🔄 Limpar Cálculo", on_click=limpar_dados_comparativos, use_container_width=True)
         
-        # <<< FEATURE 2: Botão Histórico Pessoal (para todos)
-        st.button("Meu Histórico", on_click=ir_para_historico_pessoal, use_container_width=True)
-        
+        st.button("📑 Meu Histórico", on_click=ir_para_historico_pessoal, use_container_width=True)
         st.button("🤖 Assistente I.A.", on_click=ir_para_assistente_ia, use_container_width=True)
         st.button("💬 Abrir Ticket", on_click=lambda: st.session_state.update({"tela": "tickets"}), use_container_width=True)
 
@@ -1165,36 +894,26 @@ def renderizar_sidebar():
             st.button("👤 Gerenciar Usuários", on_click=ir_para_admin, use_container_width=True)
             
         if user_is_admin() or user_is_superadmin():
-            st.button("📑 Relatório de Análises", on_click=ir_para_relatorio_analises, use_container_width=True)
+            st.button("📈 Relatório de Análises", on_click=ir_para_relatorio_analises, use_container_width=True)
             
         if user_is_superadmin():
             st.button("📋 Gerenciar Tickets", on_click=lambda: st.session_state.update({"tela": "admin_tickets"}), use_container_width=True)
-            # <<< FEATURE 3: Botão Admin
-            st.button("🗑️ Solicitações de Exclusão", on_click=ir_para_admin_delete_requests, use_container_width=True)
+            
+            # Carrega solicitações pendentes para mostrar notificação no botão
+            try:
+                all_requests = load_delete_requests()
+                pending_count = len(all_requests[all_requests['status'] == 'pendente'])
+            except:
+                pending_count = 0 # Falha em carregar
+                
+            btn_label = "🗑️ Solicitações de Exclusão"
+            if pending_count > 0:
+                btn_label = f"🗑️ Solicitações ({pending_count}) 🔴"
+                
+            st.button(btn_label, on_click=ir_para_admin_delete_requests, use_container_width=True)
 
         st.button("🚪 Sair (Logout)", on_click=logout, type="secondary", use_container_width=True)
-# --- FIM DA ATUALIZAÇÃO ---
 
-# =========================
-# Initial state & routing
-# =========================
-if "tela" not in st.session_state:
-    st.session_state.tela = "login"
-
-qp = get_query_params()
-incoming_token = qp.get("reset_token") or qp.get("token") or ""
-if incoming_token and not st.session_state.get("ignore_reset_qp"):
-    st.session_state.incoming_reset_token = incoming_token
-    st.session_state.tela = "reset_password"
-    
-if st.session_state.get('__do_logout'):
-    for key in list(st.session_state.keys()):
-        if key.startswith("ia_"): # Preserva o histórico da IA no logout
-            continue
-        del st.session_state[key]
-    st.session_state.tela = "login"
-    st.session_state['__do_logout'] = False
-    safe_rerun()
 # =========================
 # Initial state & routing
 # =========================
@@ -1690,7 +1409,7 @@ else:
             st.write("Calcule rapidamente o desconto de SLA para um único serviço ou veículo.")
             st.button("Acessar SLA Mensal", on_click=ir_para_calc_simples, use_container_width=True)
 
-    # --- PÁGINA: DASHBOARD ---
+    # --- PÁGINA: DASHBOARD (COM NOVOS GRÁFICOS) ---
     elif st.session_state.tela == "dashboard":
         if not user_is_admin():
             st.error("Acesso negado."); ir_para_home(); safe_rerun(); st.stop()
@@ -1699,7 +1418,6 @@ else:
         
         df = load_analises()
         
-        # Prepara os dados para os gráficos
         if df.empty or 'data_hora' not in df.columns or df['data_hora'].isnull().all():
             st.info("Nenhum dado de análise encontrado para exibir o dashboard.")
         else:
@@ -1718,9 +1436,89 @@ else:
                     lambda row: float(calcular_economia(row).replace("R$", "").replace(".", "").replace(",", ".")) if row['tipo'] == 'cenarios' and calcular_economia(row) else 0,
                     axis=1
                 )
+
+                # --- INÍCIO DO NOVO GRÁFICO DE MÉTRICAS ---
+                st.subheader("Resumo (Últimos 30 dias vs. 30 dias anteriores)")
+
+                # 1. Injeta o CSS customizado para as barras
+                st.markdown("""
+                <style>
+                .metric-bar-container {
+                    width: 100%;
+                    margin-bottom: 12px;
+                }
+                .metric-bar-label {
+                    font-size: 14px;
+                    color: #e2e8f0; /* Texto claro */
+                    margin-bottom: 4px;
+                    font-family: 'Lato', sans-serif;
+                }
+                .metric-bar-wrapper {
+                    width: 100%;
+                    background-color: #1e293b; /* Fundo da barra (escuro) */
+                    border-radius: 8px;
+                    height: 40px;
+                    border: 1px solid #334155;
+                    overflow: hidden;
+                }
+                .metric-bar-fill {
+                    height: 100%;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: flex-end;
+                    padding-right: 12px;
+                    font-family: 'Poppins', sans-serif;
+                    font-weight: 700;
+                    font-size: 16px;
+                    color: #0f172a; /* Texto escuro na barra */
+                    transition: width 0.5s ease-in-out;
+                }
+                </style>
+                """, unsafe_allow_html=True)
                 
-                # --- Filtros ---
-                st.markdown("### Filtros")
+                # 2. Calcula as métricas
+                now = datetime.now(tz_brasilia)
+                df['data_hora_dt'] = df['data_hora_dt'].dt.tz_convert(tz_brasilia) # Garante fuso
+                
+                # Período Atual (Últimos 30 dias)
+                current_period_start = now - timedelta(days=30)
+                df_current = df[df['data_hora_dt'] >= current_period_start]
+                
+                # Período Passado (31-60 dias atrás)
+                previous_period_start = now - timedelta(days=60)
+                previous_period_end = current_period_start
+                df_previous = df[(df['data_hora_dt'] >= previous_period_start) & (df['data_hora_dt'] < previous_period_end)]
+
+                # Métricas
+                econ_atual = df_current['economia_val'].sum()
+                econ_passada = df_previous['economia_val'].sum()
+                analises_atual = len(df_current)
+                analises_passada = len(df_previous)
+                
+                # Normalização para % (usa 95% para a barra maior)
+                max_econ = max(econ_atual, econ_passada, 0.01) # evita divisão por zero
+                max_analises = max(analises_atual, analises_passada, 1) # evita divisão por zero
+                
+                perc_econ_atual = (econ_atual / max_econ) * 95
+                perc_econ_passada = (econ_passada / max_econ) * 95
+                perc_analises_atual = (analises_atual / max_analises) * 95
+                perc_analises_passada = (analises_passada / max_analises) * 95
+                
+                # 3. Renderiza as barras
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown(render_metric_bar("Economia (Mês Atual)", econ_atual, perc_econ_atual), unsafe_allow_html=True)
+                    st.markdown(render_metric_bar("Análises (Mês Atual)", analises_atual, perc_analises_atual), unsafe_allow_html=True)
+                with col2:
+                    st.markdown(render_metric_bar("Economia (Mês Passado)", econ_passada, perc_econ_passada), unsafe_allow_html=True)
+                    st.markdown(render_metric_bar("Análises (Mês Passado)", analises_passada, perc_analises_passada), unsafe_allow_html=True)
+                
+                st.markdown("---")
+                # --- FIM DO NOVO GRÁFICO DE MÉTRICAS ---
+                
+                # --- Filtros (Restante do Dashboard) ---
+                st.markdown("### Filtros por Período")
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
@@ -1788,7 +1586,6 @@ else:
                     else:
                         st.info("Nenhum dado para este período.")
 
-                # Gráficos que só aparecem se o filtro for "Todos os Meses/Anos"
                 if mes_sel == "Todos" and ano_sel == "Todos":
                     st.markdown("---")
                     st.subheader("Análise Histórica (Todos os Períodos)")
@@ -1876,7 +1673,6 @@ else:
                     st.warning("Selecione ao menos um usuário.")
                 else:
                     to_remove = [u for u in to_approve if u != SUPERADMIN_USERNAME]
-                    # Deletar do Supabase
                     try:
                         supabase.table('users').delete().in_('username', to_remove).execute()
                         st.cache_data.clear()
@@ -2051,8 +1847,6 @@ else:
                 else:
                     dias_uteis_manut, status, desconto, dias_exc = calcular_sla_simples(data_entrada, data_saida, prazo_sla, mensalidade, feriados)
                     
-                    # <<< FEATURE 1: Protocolo
-                    # 1. Salva o resultado na session_state
                     st.session_state.resultado_sla = {
                         "cliente": cliente or "-",
                         "placa": placa_in or "-",
@@ -2065,18 +1859,15 @@ else:
                         "status": status
                     }
                     
-                    # 2. Gera um ID (protocolo) provisório para o PDF
                     protocolo_id_prov = str(uuid.uuid4())
                     
-                    # 3. Gera o PDF com o protocolo provisório
                     pdf_buf = gerar_pdf_sla_simples(
                         cliente, placa_in, tipo_servico,
                         int(dias_uteis_manut), int(prazo_sla), int(dias_exc),
                         float(mensalidade), float(desconto),
-                        protocolo_id=protocolo_id_prov # Passa o ID para o PDF
+                        protocolo_id=protocolo_id_prov
                     )
                     
-                    # 4. Registra no banco (que vai gerar o ID REAL)
                     protocolo_id_real = registrar_analise(
                         username=st.session_state.get("username"),
                         tipo="sla_mensal",
@@ -2084,22 +1875,21 @@ else:
                         pdf_bytes=pdf_buf
                     )
                     
-                    # 5. Se o registro funcionar, atualiza o PDF com o ID real
                     if protocolo_id_real:
                         st.session_state.resultado_sla["protocolo"] = protocolo_id_real
+                        # Regera o PDF com o ID correto
                         pdf_buf = gerar_pdf_sla_simples(
                             cliente, placa_in, tipo_servico,
                             int(dias_uteis_manut), int(prazo_sla), int(dias_exc),
                             float(mensalidade), float(desconto),
-                            protocolo_id=protocolo_id_real # Passa o ID REAL
+                            protocolo_id=protocolo_id_real
                         )
-                        # Atualiza o PDF no storage com o ID correto
+                        # Atualiza o PDF no storage
                         try:
-                            pdf_filename = f"sla_mensal_{st.session_state.get('username')}_{protocolo_id_real}_{datetime.now(tz_brasilia).strftime('%Y-%m-%d_%H-%M-%S')}.pdf"
+                            # Tenta buscar o pdf_path que foi salvo no registro
+                            analise_registrada = supabase.table('analises').select("pdf_path").eq('id', protocolo_id_real).single().execute()
+                            pdf_filename = analise_registrada.data['pdf_path']
                             
-                            # Atualiza o pdf_path no registro da análise
-                            supabase.table('analises').update({"pdf_path": pdf_filename}).eq('id', protocolo_id_real).execute()
-                            # Faz upload do novo PDF (com ID real)
                             supabase.storage.from_("pdfs").upload(
                                 path=pdf_filename,
                                 file=pdf_buf.getvalue(), 
@@ -2109,10 +1899,8 @@ else:
                             st.warning(f"Não foi possível atualizar o PDF com o protocolo final: {e}")
                         
                         st.success(f"Cálculo realizado! Protocolo: {protocolo_id_real}")
-                        
                     else:
                         st.error("Cálculo realizado, mas FALHOU ao registrar no banco de dados.")
-                    # --- FIM FEATURE 1 ---
 
         with col_right:
             st.subheader("Resultado")
@@ -2120,10 +1908,8 @@ else:
             if not res:
                 st.info("Preencha os dados à esquerda e clique em 'Calcular SLA'.")
             else:
-                # <<< FEATURE 1: Protocolo
                 if res.get("protocolo"):
                     st.markdown(f"**Protocolo:** `{res['protocolo']}`")
-                # --- FIM ---
                 
                 st.write(f"- Status: {res['status']}")
                 st.write(f"- Dias úteis da manutenção: {res['dias_uteis_manut']} dia(s)")
@@ -2137,7 +1923,7 @@ else:
                         res["cliente"], res["placa"], res["tipo_servico"], 
                         res["dias_uteis_manut"], res["prazo_sla"], res["dias_excedente"], 
                         res["mensalidade"], res["desconto"],
-                        protocolo_id=res.get("protocolo", "N/A") # Usa o protocolo salvo
+                        protocolo_id=res.get("protocolo", "N/A")
                     )
                     st.download_button("📥 Baixar PDF do Resultado", data=pdf_buf, file_name=f"sla_{res['placa'] or 'veiculo'}.pdf", mime="application/pdf")
                 
@@ -2182,14 +1968,9 @@ else:
             melhor = df_cenarios.loc[idx_min]
             st.success(f"🏆 Melhor cenário: {melhor['Serviço']} | Placa {melhor['Placa']} | Total Final: {melhor['Total Final (R$)']}")
 
-            # <<< FEATURE 1: Protocolo
-            # 1. Gera um ID (protocolo) provisório
             protocolo_id_prov = str(uuid.uuid4())
-            
-            # 2. Gera o PDF com o ID provisório
             pdf_buffer = gerar_pdf_comparativo(df_cenarios, melhor, protocolo_id=protocolo_id_prov)
 
-            # 3. Registra no banco (que gera o ID REAL)
             protocolo_id_real = registrar_analise(
                 username=st.session_state.get("username"),
                 tipo="cenarios",
@@ -2200,14 +1981,13 @@ else:
                 pdf_bytes=pdf_buffer
             )
             
-            # 4. Se o registro funcionar, atualiza o PDF com o ID real
             if protocolo_id_real:
                 st.success(f"Análise registrada! Protocolo: {protocolo_id_real}")
                 pdf_buffer = gerar_pdf_comparativo(df_cenarios, melhor, protocolo_id=protocolo_id_real)
-                # Atualiza o PDF no storage
                 try:
-                    pdf_filename = f"cenarios_{st.session_state.get('username')}_{protocolo_id_real}_{datetime.now(tz_brasilia).strftime('%Y-%m-%d_%H-%M-%S')}.pdf"
-                    supabase.table('analises').update({"pdf_path": pdf_filename}).eq('id', protocolo_id_real).execute()
+                    analise_registrada = supabase.table('analises').select("pdf_path").eq('id', protocolo_id_real).single().execute()
+                    pdf_filename = analise_registrada.data['pdf_path']
+                    
                     supabase.storage.from_("pdfs").upload(
                         path=pdf_filename,
                         file=pdf_buffer.getvalue(), 
@@ -2217,7 +1997,6 @@ else:
                     st.warning(f"Não foi possível atualizar o PDF com o protocolo final: {e}")
             else:
                 st.error("Análise comparada, mas FALHOU ao registrar no banco de dados.")
-            # --- FIM FEATURE 1 ---
 
             st.download_button("📥 Baixar Relatório PDF", pdf_buffer, "comparacao_cenarios_sla.pdf", "application/pdf")
             if st.button("🔄 Reiniciar Comparação", on_click=limpar_dados_comparativos, use_container_width=True, type="primary"):
@@ -2436,7 +2215,7 @@ else:
                 # Reordena as colunas
                 colunas = [
                     "Protocolo", "Cliente", "Placa", "Serviço", "Valor Final", "Economia",
-                    "Usuário", "Data/Hora", "PDF", "pdf_path" # Mantém pdf_path para o loop
+                    "Usuário", "Data/Hora", "PDF", "pdf_path"
                 ]
                 colunas_finais = [c for c in colunas if c in df_flat.columns]
                 df_flat = df_flat[colunas_finais]
@@ -2458,7 +2237,7 @@ else:
                     economia_str = row.get('Economia')
                     
                     with st.container(border=True):
-                        st.write(f"**Protocolo:** `{row['Protocolo']}`") # <<< FEATURE 1: Protocolo
+                        st.write(f"**Protocolo:** `{row['Protocolo']}`")
                         st.write(f"**Cliente:** {row['Cliente']}")
                         st.write(f"**Placa:** {row['Placa']}")
                         st.write(f"**Serviço:** {row['Serviço']}")
@@ -2468,31 +2247,13 @@ else:
                         st.write(f"**Usuário:** {row['Usuário']}")
                         st.write(f"**Data/Hora:** {row['Data/Hora']}")
                         
-                        col1, col2 = st.columns([1, 1])
+                        pdf_link = row.get("PDF", "")
+                        if pdf_link and "http" in pdf_link:
+                            st.link_button("📥 Baixar PDF", pdf_link, use_container_width=True)
                         
-                        # Coluna do Link PDF
-                        with col1:
-                            pdf_link = row.get("PDF", "")
-                            if pdf_link and "http" in pdf_link:
-                                st.link_button("📥 Baixar PDF", pdf_link, use_container_width=True)
-                        
-                        # Coluna do Botão Apagar (SÓ PARA ADMINS)
-                        with col2:
-                            if user_is_admin(): # A função já checa admin E superadmin
-                                db_id = row.get("Protocolo")
-                                pdf_path = row.get("pdf_path")
-                                
-                                # <<< FEATURE 2: Botão alterado para SOLICITAR
-                                st.button("🗑️ Solicitar Exclusão", 
-                                          key=f"del_{db_id}", 
-                                          type="primary", 
-                                          use_container_width=True,
-                                          on_click=create_delete_request,
-                                          args=(db_id, pdf_path, st.session_state.get("username")))
-
             else:
                 st.info("Nenhuma análise encontrada para o filtro selecionado.")
-            
+
     # --- PÁGINA: GERENCIAR TICKETS (SUPERADMIN) ---
     elif st.session_state.tela == "admin_tickets":
         if not user_is_superadmin():
@@ -2679,43 +2440,36 @@ else:
             st.error(f"Não foi possível iniciar o assistente de I.A. Verifique se a API Key do Google está correta e habilitada. Erro: {e}")
             if "ia_chat" in st.session_state: del st.session_state.ia_chat
             if "ia_model" in st.session_state: del st.session_state.ia_model
-
-    # --- FEATURE 2: NOVA PÁGINA DE HISTÓRICO PESSOAL ---
+            
+    # --- PÁGINA: HISTÓRICO PESSOAL (FEATURE 2) ---
     elif st.session_state.tela == "historico_pessoal":
-        st.title("Meu Histórico de Análises")
+        st.title("📑 Meu Histórico de Análises")
         
         current_username = st.session_state.get("username")
         
-        # Carrega todos os dados
         df_all_analises = load_analises()
         df_delete_requests = load_delete_requests()
         
-        # 1. Filtra análises apenas deste usuário
         df = df_all_analises[df_all_analises['username'] == current_username]
         
         if df.empty:
             st.info("Você ainda não realizou nenhuma análise.")
         else:
-            # Pega os IDs de análises que este usuário já pediu para deletar (pendentes)
             pending_deletion_ids = df_delete_requests[
                 (df_delete_requests['requested_by'] == current_username) &
                 (df_delete_requests['status'] == 'pendente')
             ]['analise_id'].tolist()
 
-            # --- Filtros ---
             st.subheader("Filtrar Histórico")
             
-            # Filtros de Texto
             col1, col2 = st.columns(2)
             with col1:
                 search_protocolo = st.text_input("Buscar por Protocolo (ID)")
             with col2:
                 search_placa = st.text_input("Buscar por Placa")
             
-            # Filtros de Data e Tipo
             col1, col2, col3 = st.columns(3)
             with col1:
-                # Prepara filtros de data
                 df['data_hora_dt'] = pd.to_datetime(df['data_hora'], errors='coerce')
                 df = df.dropna(subset=['data_hora_dt'])
                 opcoes_ano = ["Todos"] + sorted(list(df['data_hora_dt'].dt.year.unique()), reverse=True)
@@ -2732,21 +2486,15 @@ else:
             with col3:
                 tipo_sel = st.selectbox("Tipo:", ["Todos", "sla_mensal", "cenarios"])
                 
-            # --- Aplica Filtros ---
             df_filtrado = df.copy()
             
-            # 1. Filtros de Data
             if ano_sel != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['data_hora_dt'].dt.year == ano_sel]
             if mes_sel != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['data_hora_dt'].dt.month == meses_map[mes_sel]]
-            
-            # 2. Filtro de Tipo
             if tipo_sel != "Todos":
                 df_filtrado = df_filtrado[df_filtrado['tipo'] == tipo_sel]
                 
-            # 3. Achatamento dos dados (só depois de filtrar por tipo, se necessário)
-            # Precisamos extrair a placa para o filtro de texto
             df_flat_list = [extrair_linha_relatorio(row, supabase_public_url) for _, row in df_filtrado.iterrows()]
             if not df_flat_list:
                 st.info("Nenhum resultado encontrado para os filtros selecionados.")
@@ -2754,7 +2502,6 @@ else:
                 
             df_flat = pd.DataFrame(df_flat_list)
             
-            # 4. Filtros de Texto
             if search_protocolo.strip():
                 df_flat = df_flat[df_flat['Protocolo'].str.contains(search_protocolo.strip(), case=False, na=False)]
             if search_placa.strip():
@@ -2763,7 +2510,6 @@ else:
             st.markdown("---")
             st.write(f"Resultados encontrados: {len(df_flat)}")
 
-            # --- Exibe Resultados ---
             if df_flat.empty:
                 st.info("Nenhum resultado encontrado para os filtros selecionados.")
             else:
@@ -2782,7 +2528,6 @@ else:
                             
                         analise_id_atual = row['Protocolo']
                         
-                        # Botão de solicitar exclusão
                         if analise_id_atual in pending_deletion_ids:
                             col2.button("Solicitação Pendente", key=f"del_{analise_id_atual}", use_container_width=True, disabled=True)
                         else:
@@ -2792,8 +2537,8 @@ else:
                                         use_container_width=True,
                                         on_click=create_delete_request,
                                         args=(analise_id_atual, row['pdf_path'], current_username))
-    
-    # --- FEATURE 3: NOVA PÁGINA DE ADMIN DE EXCLUSÕES ---
+
+    # --- PÁGINA: ADMIN DE EXCLUSÕES (FEATURE 3) ---
     elif st.session_state.tela == "admin_delete_requests":
         if not user_is_admin(): # Apenas Admin ou Superadmin
             st.error("Acesso negado."); ir_para_home(); safe_rerun(); st.stop()
@@ -2805,22 +2550,26 @@ else:
         
         pending_requests = df_requests[df_requests['status'] == 'pendente']
         
-        st.subheader("Solicitações Pendentes")
+        st.subheader(f"Solicitações Pendentes ({len(pending_requests)})")
         
         if pending_requests.empty:
             st.info("Nenhuma solicitação de exclusão pendente.")
         else:
-            # Junta com os dados da análise para dar contexto
             df_analises_context = pd.DataFrame([extrair_linha_relatorio(row) for _, row in df_analises.iterrows()])
             
-            # Junta as solicitações com os dados das análises
-            pending_full = pd.merge(
-                pending_requests, 
-                df_analises_context[['Protocolo', 'Cliente', 'Placa', 'tipo']], 
-                left_on='analise_id', 
-                right_on='Protocolo',
-                how='left'
-            )
+            if not df_analises_context.empty:
+                pending_full = pd.merge(
+                    pending_requests, 
+                    df_analises_context[['Protocolo', 'Cliente', 'Placa', 'tipo']], 
+                    left_on='analise_id', 
+                    right_on='Protocolo',
+                    how='left'
+                ).fillna("N/A")
+            else:
+                pending_full = pending_requests
+                pending_full['Placa'] = 'N/A'
+                pending_full['Cliente'] = 'N/A'
+
             
             for _, req in pending_full.iterrows():
                 with st.container(border=True):
@@ -2842,6 +2591,9 @@ else:
                                 # 2. Atualiza o status da solicitação
                                 review_delete_request(req['id'], approved=True, reviewed_by=st.session_state.get("username"))
                                 st.success(f"Análise {req['analise_id']} APROVADA e excluída.")
+                                # Limpa o cache de notificações do usuário
+                                if "user_notifications" in st.session_state:
+                                    del st.session_state.user_notifications
                                 safe_rerun()
                             except Exception as e:
                                 st.error(f"Erro ao aprovar: {e}")
@@ -2854,6 +2606,9 @@ else:
                                     # Apenas atualiza o status da solicitação
                                     review_delete_request(req['id'], approved=False, reviewed_by=st.session_state.get("username"), notes=notes)
                                     st.warning(f"Análise {req['analise_id']} REPROVADA.")
+                                    # Limpa o cache de notificações do usuário
+                                    if "user_notifications" in st.session_state:
+                                        del st.session_state.user_notifications
                                     safe_rerun()
                                 except Exception as e:
                                     st.error(f"Erro ao reprovar: {e}")
@@ -2863,7 +2618,7 @@ else:
         if not completed_requests.empty:
             with st.expander("Ver histórico de solicitações revisadas"):
                 st.dataframe(completed_requests, use_container_width=True)
-    
+
     # --- PÁGINA: FALLBACK ---
     else:
         st.error("Tela não encontrada ou ainda não implementada.")
@@ -2873,4 +2628,3 @@ else:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # End of file
-        
