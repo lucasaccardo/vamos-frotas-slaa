@@ -41,7 +41,6 @@ tz_brasilia = pytz.timezone('America/Sao_Paulo')
 # =========================
 # Page config (MOVIDO PARA O TOPO)
 # =========================
-# <<< CORREÇÃO 3: Movido st.set_page_config para ser a PRIMEIRA chamada do Streamlit >>>
 try:
     st.set_page_config(
         page_title="Frotas Vamos SLA",
@@ -205,7 +204,6 @@ def get_ia_context_summary():
         if df_base is not None and not df_base.empty:
             summary_lines.append("--- Contexto: Base de Clientes (Base De Clientes Faturamento.xlsx) ---")
             
-            # Limite de segurança: Se a base for GIGANTE, envie só um resumo.
             if len(df_base) > 500: 
                 summary_lines.append(f"A base de clientes é grande ({len(df_base)} linhas). Segue um resumo das 10 primeiras linhas:")
                 summary_lines.append(df_base.head(10).to_string()) 
@@ -227,7 +225,6 @@ def get_ia_context_summary():
         if not df_analises.empty:
             summary_lines.append("--- Contexto: Resumo do Histórico de Análises (Supabase) ---")
             
-            # Calcula economia (como no dashboard)
             df_analises['economia_val'] = df_analises.apply(
                 lambda row: float(calcular_economia(row).replace("R$", "").replace(".", "").replace(",", ".")) if row['tipo'] == 'cenarios' and calcular_economia(row) else 0,
                 axis=1
@@ -241,7 +238,6 @@ def get_ia_context_summary():
             summary_lines.append(f"- Total de análises de cenários feitas: {total_cenarios}")
             summary_lines.append(f"- Total de análises 'SLA Mensal' feitas: {total_sla_mensal}")
             
-            # Resumo por usuário (para responder "o que o Lucas fez?")
             summary_lines.append("- Atividade por usuário (total de análises):")
             user_activity = df_analises['username'].value_counts()
             if user_activity.empty:
@@ -273,7 +269,6 @@ def get_ia_context_summary():
     if not summary_lines:
         return "Nenhum dado de contexto disponível no momento."
         
-    # Junta todo o texto de contexto
     return "Dados de contexto do aplicativo:\n" + "\n".join(summary_lines)
 # ---------------------------------
 
@@ -312,20 +307,18 @@ def extrair_linha_relatorio(row, supabase_url=None):
         cliente = placa = servico = valor_final = "-"
 
     pdf_link = ""
-    if row.get("pdf_path"): # .get() para segurança
+    if row.get("pdf_path"): 
         if supabase_url:
             pdf_link = f"{supabase_url}/pdfs/{row['pdf_path']}"
         else:
             pdf_link = "#" 
 
-    # <<< CORREÇÃO 1: PROTOCOLO >>>
     protocolo_uuid = row["id"]
-    # Converte o primeiro bloco do UUID para um int e pega os últimos 8 dígitos
     protocolo_display = str(int(protocolo_uuid.split('-')[0], 16))[-8:] 
     
     return {
-        "Protocolo_UUID": protocolo_uuid, # ID real para joins e deletes
-        "Protocolo": protocolo_display,  # ID curto para exibição
+        "Protocolo_UUID": protocolo_uuid, 
+        "Protocolo": protocolo_display,  
         "Cliente": cliente,
         "Placa": placa,
         "Serviço": servico,
@@ -336,7 +329,6 @@ def extrair_linha_relatorio(row, supabase_url=None):
         "tipo": row["tipo"],
         "dados_json": row["dados_json"],
         "pdf_path": row["pdf_path"],
-        # <<< CORREÇÃO 2: Campos Obrigatórios >>>
         "Chamado O.S": dados.get("os_chamado", "-"),
         "Opção": dados.get("opcao", "-")
     }
@@ -379,7 +371,6 @@ def gerar_excel_moderno(df_flat):
     normal_format = workbook.add_format({'border': 1})
     link_format = workbook.add_format({'font_color': 'blue', 'underline': 1, 'border': 1})
 
-    # <<< CORREÇÃO 1 & 2: Adicionado Protocolo e novos campos >>>
     headers_ordenados = [
         "Protocolo", "Data/Hora", "Chamado O.S", "Opção", "Cliente", "Placa", "Serviço", 
         "Valor Final", "Economia", "Usuário", "PDF"
@@ -431,7 +422,6 @@ DELETION_REQUESTS_COLS = [
 ]
 SUPERADMIN_USERNAME = st.secrets.get("SUPERADMIN_USERNAME", "lucas.sureira")
 
-
 # =========================
 # Funções de Dados (Refatoradas para Supabase)
 # =========================
@@ -464,7 +454,6 @@ def save_analises(df):
     except Exception as e:
         st.error(f"Erro ao salvar análises no Supabase: {e}")
 
-# <<< CORREÇÃO 1 & 2: PROTOCOLO / DATA >>>
 def registrar_analise(username, tipo, dados, pdf_bytes) -> Tuple[str, str]: # Retorna (UUID, DataHoraString)
     """Registra a análise e o PDF, e retorna o ID (protocolo) e a DataHora."""
     novo_id = str(uuid.uuid4())
@@ -1026,8 +1015,8 @@ def calcular_cenario_comparativo(cliente, placa, entrada, saida, feriados, servi
         "Detalhe Peças": pecas or []
     }
 
-# <<< CORREÇÃO 1 & 2: PROTOCOLO / NOVOS CAMPOS >>>
-def gerar_pdf_comparativo(df_cenarios, melhor_cenario, protocolo_id, os_chamado, opcao, data_hora):
+# <<< CORREÇÃO 2: Adicionado `gerado_por_user` >>>
+def gerar_pdf_comparativo(df_cenarios, melhor_cenario, protocolo_id, os_chamado, opcao, data_hora, gerado_por_user):
     if df_cenarios is None or df_cenarios.empty:
         return BytesIO()
     
@@ -1040,6 +1029,7 @@ def gerar_pdf_comparativo(df_cenarios, melhor_cenario, protocolo_id, os_chamado,
     
     elementos.append(Paragraph(f"Protocolo: {protocolo_display}", styles['Normal']))
     elementos.append(Paragraph(f"Data da Análise: {data_hora}", styles['Normal']))
+    elementos.append(Paragraph(f"Gerado por: {gerado_por_user}", styles['Normal']))
     elementos.append(Paragraph(f"Chamado O.S: {os_chamado}", styles['Normal']))
     elementos.append(Paragraph(f"Opção: {opcao}", styles['Normal']))
     elementos.append(Spacer(1, 12))
@@ -1085,8 +1075,8 @@ def calcular_sla_simples(data_entrada, data_saida, prazo_sla, valor_mensalidade,
         desconto = (valor_mensalidade / 30) * dias_excedente
     return dias, status, desconto, dias_excedente
 
-# <<< CORREÇÃO 1 & 2: PROTOCOLO / NOVOS CAMPOS >>>
-def gerar_pdf_sla_simples(cliente, placa, tipo_servico, dias_uteis_manut, prazo_sla, dias_excedente, valor_mensalidade, desconto, protocolo_id, os_chamado, opcao, data_hora):
+# <<< CORREÇÃO 2: Adicionado `gerado_por_user` >>>
+def gerar_pdf_sla_simples(cliente, placa, tipo_servico, dias_uteis_manut, prazo_sla, dias_excedente, valor_mensalidade, desconto, protocolo_id, os_chamado, opcao, data_hora, gerado_por_user):
     protocolo_display = str(int(protocolo_id.split('-')[0], 16))[-8:]
 
     buffer = BytesIO()
@@ -1102,6 +1092,7 @@ def gerar_pdf_sla_simples(cliente, placa, tipo_servico, dias_uteis_manut, prazo_
     c.setFont("Helvetica", 12)
     y = altura - 100
     text_lines = [
+        f"Gerado por: {gerado_por_user}",
         f"Chamado O.S: {os_chamado}",
         f"Opção: {opcao}",
         f"Cliente: {cliente}",
@@ -1138,7 +1129,6 @@ def ir_para_historico_pessoal(): st.session_state.tela = "historico_pessoal"
 def ir_para_admin_delete_requests(): st.session_state.tela = "admin_delete_requests"
 
 def limpar_dados_comparativos():
-    # <<< CORREÇÃO 2: Limpa os campos da sessão também
     for key in ["cenarios", "pecas_atuais", "mostrar_comparativo", "comparativa_os", "comparativa_opcao"]:
         if key in st.session_state: del st.session_state[key]
 
@@ -1167,7 +1157,6 @@ def renderizar_sidebar():
 
         st.header("Menu de Navegação")
         
-        # --- 1. AÇÕES PRINCIPAIS (TODOS) ---
         st.button("🏠 Voltar para Home", on_click=ir_para_home, use_container_width=True)
         
         if st.session_state.tela in ("calc_comparativa", "calc_simples"):
@@ -1175,12 +1164,10 @@ def renderizar_sidebar():
         
         st.markdown("---") # Separador
 
-        # --- 2. FERRAMENTAS DO USUÁRIO (TODOS) ---
         st.button("📑 Meu Histórico", on_click=ir_para_historico_pessoal, use_container_width=True)
         st.button("🤖 Assistente I.A.", on_click=ir_para_assistente_ia, use_container_width=True)
         st.button("💬 Abrir Ticket", on_click=lambda: st.session_state.update({"tela": "tickets"}), use_container_width=True)
 
-        # --- 3. PAINEL DE ADMIN ---
         if user_is_admin():
             st.markdown("---") # Separador
             st.subheader("Admin")
@@ -1188,7 +1175,6 @@ def renderizar_sidebar():
             st.button("📈 Relatório de Análises", on_click=ir_para_relatorio_analises, use_container_width=True)
             st.button("👤 Gerenciar Usuários", on_click=ir_para_admin, use_container_width=True)
             
-        # --- 4. PAINEL SUPERADMIN ---
         if user_is_superadmin():
             # Apenas superadmin vê seu próprio separador se não for admin
             if not user_is_admin():
@@ -1200,12 +1186,11 @@ def renderizar_sidebar():
                  
             st.button("📋 Gerenciar Tickets", on_click=lambda: st.session_state.update({"tela": "admin_tickets"}), use_container_width=True)
             
-            # Carrega solicitações pendentes para mostrar notificação no botão
             try:
                 all_requests = load_delete_requests()
                 pending_count = len(all_requests[all_requests['status'] == 'pendente'])
             except:
-                pending_count = 0 # Falha em carregar
+                pending_count = 0 
                 
             btn_label = "🗑️ Solicitações de Exclusão"
             if pending_count > 0:
@@ -1213,8 +1198,7 @@ def renderizar_sidebar():
                 
             st.button(btn_label, on_click=ir_para_admin_delete_requests, use_container_width=True)
 
-        # --- 5. SAIR (SEMPRE POR ÚLTIMO) ---
-        st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True) # Espaço antes de sair
+        st.markdown("<div style='margin-top: 20px;'></div>", unsafe_allow_html=True) 
         st.button("🚪 Sair (Logout)", on_click=logout, type="secondary", use_container_width=True)
 # --- FIM DA ATUALIZAÇÃO ---
 
@@ -1281,10 +1265,10 @@ if st.session_state.tela == "login":
 
     col1, col2, col3, col4, col5 = st.columns([1, 2, 2, 2, 1])
     with col2:
-        if st.button("Sign up"): # Botão corrigido (sem use_container_width)
+        if st.button("Sign up"):
             ir_para_register(); safe_rerun()
     with col4:
-        if st.button("Reset Password"): # Botão corrigido (sem use_container_width)
+        if st.button("Reset Password"):
             ir_para_forgot(); safe_rerun()
 
     st.markdown("</div>", unsafe_allow_html=True) # Fecha login-card
@@ -2084,7 +2068,7 @@ else:
             
             if calc:
                 # <<< CORREÇÃO 2: Validação dos Campos Obrigatórios >>>
-                if not os_chamado or not opcao_sel:
+                if not os_chamado.strip() or not opcao_sel.strip():
                     st.error("Por favor, preencha os campos 'Chamado O.S' e 'Opção' (Vetor/Geo).")
                 elif not placa_in and not cliente:
                     st.error("Informe ao menos a placa ou o cliente.")
@@ -2106,7 +2090,8 @@ else:
                         "desconto": float(desconto),
                         "status": status,
                         "os_chamado": os_chamado, # Salva o campo
-                        "opcao": opcao_sel       # Salva o campo
+                        "opcao": opcao_sel,       # Salva o campo
+                        "gerado_por": st.session_state.get("full_name", st.session_state.get("username")) # Salva o usuário
                     }
                     
                     protocolo_id_prov = str(uuid.uuid4())
@@ -2119,7 +2104,8 @@ else:
                         protocolo_id=protocolo_id_prov,
                         os_chamado=os_chamado,
                         opcao=opcao_sel,
-                        data_hora=data_hora_prov
+                        data_hora=data_hora_prov,
+                        gerado_por_user=st.session_state.resultado_sla["gerado_por"]
                     )
                     
                     protocolo_id_real, data_hora_real = registrar_analise(
@@ -2140,7 +2126,8 @@ else:
                             protocolo_id=protocolo_id_real,
                             os_chamado=os_chamado,
                             opcao=opcao_sel,
-                            data_hora=data_hora_real
+                            data_hora=data_hora_real,
+                            gerado_por_user=st.session_state.resultado_sla["gerado_por"]
                         )
                         try:
                             analise_registrada = supabase.table('analises').select("pdf_path").eq('id', protocolo_id_real).single().execute()
@@ -2184,7 +2171,8 @@ else:
                         protocolo_id=res.get("protocolo", "N/A"),
                         os_chamado=res.get("os_chamado", "N/A"),
                         opcao=res.get("opcao", "N/A"),
-                        data_hora=res.get("data_hora", "N/A")
+                        data_hora=res.get("data_hora", "N/A"),
+                        gerado_por_user=res.get("gerado_por", "N/A")
                     )
                     st.download_button("📥 Baixar PDF do Resultado", data=pdf_buf, file_name=f"sla_{res['placa'] or 'veiculo'}.pdf", mime="application/pdf")
                 
@@ -2247,21 +2235,23 @@ else:
 
             protocolo_id_prov = str(uuid.uuid4())
             data_hora_prov = datetime.now(tz_brasilia).strftime("%d/%m/%Y %H:%M:%S")
+            user_nome_prov = st.session_state.get("full_name", st.session_state.get("username"))
 
             pdf_buffer = gerar_pdf_comparativo(
                 df_cenarios, melhor, 
                 protocolo_id=protocolo_id_prov,
                 os_chamado=st.session_state.comparativa_os,
                 opcao=st.session_state.comparativa_opcao,
-                data_hora=data_hora_prov
+                data_hora=data_hora_prov,
+                gerado_por_user=user_nome_prov
             )
 
-            # Prepara os dados para salvar
             dados_para_salvar = {
                 "cenarios": st.session_state.cenarios,
                 "melhor": melhor.to_dict(),
                 "os_chamado": st.session_state.comparativa_os,
-                "opcao": st.session_state.comparativa_opcao
+                "opcao": st.session_state.comparativa_opcao,
+                "gerado_por": user_nome_prov
             }
 
             protocolo_id_real, data_hora_real = registrar_analise(
@@ -2275,13 +2265,13 @@ else:
                 protocolo_id_display = str(int(protocolo_id_real.split('-')[0], 16))[-8:]
                 st.success(f"Análise registrada! Protocolo: {protocolo_id_display}")
                 
-                # Regera o PDF com os dados reais
                 pdf_buffer = gerar_pdf_comparativo(
                     df_cenarios, melhor, 
                     protocolo_id=protocolo_id_real,
                     os_chamado=st.session_state.comparativa_os,
                     opcao=st.session_state.comparativa_opcao,
-                    data_hora=data_hora_real
+                    data_hora=data_hora_real,
+                    gerado_por_user=user_nome_prov
                 )
                 try:
                     analise_registrada = supabase.table('analises').select("pdf_path").eq('id', protocolo_id_real).single().execute()
@@ -2539,7 +2529,7 @@ else:
                             st.write(f"**Economia:** {economia_str}")
                         st.write(f"**Usuário:** {row['Usuário']}")
                         st.write(f"**Data/Hora:** {row['Data/Hora']}")
-                        st.write(f"**O.S:** {row['Chamado O.S']} | **Opção:** {row['Opção']}") # <<< CORREÇÃO 2: Exibe
+                        st.write(f"**O.S:** {row['Chamado O.S']} | **Opção:** {row['Opção']}")
                         
                         col1, col2 = st.columns([1, 1])
                         with col1:
@@ -2818,11 +2808,11 @@ else:
                 else:
                     for _, row in df_flat.iterrows():
                         with st.container(border=True):
-                            st.markdown(f"**Protocolo:** `{row['Protocolo']}`") # Mostra ID curto
+                            st.markdown(f"**Protocolo:** `{row['Protocolo']}`")
                             st.write(f"**Tipo:** {row['tipo'].replace('_', ' ').capitalize()}")
                             st.write(f"**Placa:** {row['Placa']} | **Cliente:** {row['Cliente']}")
                             st.write(f"**Data:** {row['Data/Hora']}")
-                            st.write(f"**O.S:** {row['Chamado O.S']} | **Opção:** {row['Opção']}") # <<< CORREÇÃO 2: Exibe
+                            st.write(f"**O.S:** {row['Chamado O.S']} | **Opção:** {row['Opção']}")
                             
                             col1, col2 = st.columns([1, 1])
                             
@@ -2830,7 +2820,7 @@ else:
                             if pdf_link and "http" in pdf_link:
                                 col1.link_button("📥 Baixar PDF", pdf_link, use_container_width=True)
                                 
-                            analise_id_atual_uuid = row['Protocolo_UUID'] # Usa o ID real (UUID)
+                            analise_id_atual_uuid = row['Protocolo_UUID'] 
                             
                             if analise_id_atual_uuid in pending_deletion_ids:
                                 col2.button("Solicitação Pendente", key=f"del_{analise_id_atual_uuid}", use_container_width=True, disabled=True)
@@ -2864,9 +2854,9 @@ else:
             if not df_analises_context.empty:
                 pending_full = pd.merge(
                     pending_requests, 
-                    df_analises_context[['Protocolo_UUID', 'Protocolo', 'Cliente', 'Placa', 'tipo', 'Chamado O.S', 'Opção']], # Pega todos os campos
+                    df_analises_context[['Protocolo_UUID', 'Protocolo', 'Cliente', 'Placa', 'tipo', 'Chamado O.S', 'Opção']], 
                     left_on='analise_id', 
-                    right_on='Protocolo_UUID', # Faz join pelo UUID
+                    right_on='Protocolo_UUID',
                     how='left'
                 ).fillna("N/A")
             else:
@@ -2882,7 +2872,7 @@ else:
                 with st.container(border=True):
                     st.write(f"**Solicitante:** {req['requested_by']}")
                     st.write(f"**Data da Solicitação:** {pd.to_datetime(req['created_at']).strftime('%d/%m/%Y %H:%M')}")
-                    st.markdown(f"**Protocolo da Análise:** `{req['Protocolo']}`") # Mostra o ID curto
+                    st.markdown(f"**Protocolo da Análise:** `{req['Protocolo']}`")
                     st.write(f"**Placa:** {req.get('Placa', 'N/A')} | **Cliente:** {req.get('Cliente', 'N/A')}")
                     st.write(f"**O.S:** {req.get('Chamado O.S', 'N/A')} | **Opção:** {req.get('Opção', 'N/A')}")
                     
@@ -2894,9 +2884,7 @@ else:
                         
                         if approve_button:
                             try:
-                                # 1. Deleta a análise e o PDF
                                 delete_analise(req['analise_id'], req['pdf_path']) # Usa o ID real (UUID)
-                                # 2. Atualiza o status da solicitação
                                 review_delete_request(req['id'], approved=True, reviewed_by=st.session_state.get("username"))
                                 st.success(f"Análise {req['Protocolo']} APROVADA e excluída.")
                                 if "user_notifications" in st.session_state:
